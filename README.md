@@ -27,7 +27,7 @@ Copilot usage
 ## Setup
 
 ```bash
-npm install -g https://github.com/drogers0/llm-usage/releases/download/v0.0.1/llm-usage-0.0.1.tgz
+npm install -g https://github.com/drogers0/llm-usage/releases/download/v0.0.2/llm-usage-0.0.2.tgz
 usage-check-setup
 ```
 
