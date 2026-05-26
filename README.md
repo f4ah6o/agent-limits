@@ -1,108 +1,87 @@
-# LLM Usage Check
+# usage-check
 
-Check your Claude, Codex, and Copilot usage limits from the terminal.
+A single static **Go binary** that reports your Claude, Codex, and Copilot usage from the terminal.
 
 ```
-$ usage-check
+$ usage-check -h
 Claude usage
-- 5-hour: 2.0%
-- 7-day: 21.0%
-- 7-day sonnet: 0.0%
+- 5-hour: 6.0% (resets in 4h 48m)
+- 7-day: 42.0% (resets in 48m)
+- 7-day sonnet: 10.0% (resets in 48m)
 
 Codex usage
-- 5-hour: 0.0%
-- 7-day: 11.0%
-- Code review 7-day: 0.0%
+- 5-hour: 2.0% (resets in 2h 26m)
+- 7-day: 0.0% (resets in 6d 21h)
 
 Copilot usage
-- month: 4.0%
+- month: 67.3% (resets in 5d 1h)
 ```
 
-## Requirements
+JSON is the default; `-h`/`--human` opts into the text rendering above.
 
-- macOS (uses AppleScript to trigger Chrome)
-- Google Chrome with an active login to `claude.ai`, `chatgpt.com`, and `github.com`
-- Node.js 20+
+## Install
 
-## Setup
-
-```bash
-npm install -g https://github.com/drogers0/llm-usage/releases/download/v0.0.3/llm-usage-0.0.3.tgz
-usage-check-setup
+```
+go install github.com/drogers0/llm-usage/cmd/usage-check@latest
 ```
 
-The setup command walks you through loading the Chrome extension and registering the native messaging host.
+Requires Go 1.22+. macOS only (Claude credentials live in the macOS Keychain).
 
 ## Usage
 
-```bash
-usage-check                # all services, human-readable
-usage-check claude         # claude only
-usage-check codex          # codex only
-usage-check copilot        # copilot only
-usage-check --json         # all services, JSON
-usage-check claude --json  # claude only, JSON
-usage-check --debug        # diagnostics on stderr
+```
+usage-check                # all services, JSON
+usage-check claude         # claude only, JSON
+usage-check codex          # codex only, JSON
+usage-check copilot        # copilot only, JSON
+usage-check -h             # all services, human-readable text
+usage-check claude -h      # claude only, human-readable
+usage-check --debug        # per-provider URL, status, timing to stderr
+usage-check --help         # print help
 ```
 
-## JSON Output
+`-h` is the short form of `--human` (the text renderer). Help is `--help` only.
+
+## How it works
+
+Each provider has one credential source and one HTTPS endpoint:
+
+| Provider | Credential | Endpoint |
+|----------|------------|----------|
+| Claude   | macOS Keychain item `Claude Code-credentials` (populated by `claude /login`) | `api.anthropic.com/api/oauth/usage` |
+| Codex    | `~/.codex/auth.json` (populated by `codex login`) | `chatgpt.com/backend-api/wham/usage` |
+| Copilot  | `gh auth token` (populated by `gh auth login`; needs the `user` scope) | `api.github.com/users/{login}/settings/billing/premium_request/usage` |
+
+Providers are fetched in parallel. A failing provider does not block the others; the binary exits 0 only when every requested provider succeeded, otherwise exit 2. Each failed provider's error message is surfaced in the JSON (`providers.<id>.error`) and as `<Cap> usage: <error>` in text mode.
+
+## Authentication
+
+If a provider's credential is missing, the error message names the exact command to fix it. For Copilot, the `user` scope is required:
+
+```
+gh auth refresh -h github.com -s user
+```
+
+## Output contract
 
 ```json
 {
-  "checked_at": "2026-03-18T01:06:14+00:00",
+  "checked_at": "2026-05-26T22:00:00+00:00",
   "providers": {
-    "claude": {
-      "limits": {
-        "five_hour": {
-          "used_percent": 2,
-          "remaining_percent": 98,
-          "resets_at": "2026-03-18T05:59:59+00:00",
-          "reset_after_seconds": 17625
-        },
-        "seven_day": { "..." },
-        "seven_day_sonnet": { "..." }
-      }
-    },
-    "codex": {
-      "limits": {
-        "five_hour": { "..." },
-        "seven_day": { "..." },
-        "code_review_seven_day": { "..." }
-      }
-    },
-    "copilot": {
-      "limits": {
-        "month": {
-          "used_percent": 4,
-          "remaining_percent": 96,
-          "resets_at": "2026-04-01T00:00:00+00:00",
-          "reset_after_seconds": 1065600
-        }
-      }
-    }
+    "claude":  { "limits": { "five_hour": {"used_percent": 6, "remaining_percent": 94, "resets_at": "2026-05-27T03:00:00+00:00", "reset_after_seconds": 17280}, ... } },
+    "codex":   { "limits": { ... } },
+    "copilot": { "limits": { "month": { ... } } }
   }
 }
 ```
 
-Each limit window contains `used_percent`, `remaining_percent`, `resets_at` (ISO 8601), and `reset_after_seconds`.
+Every `Limit` has the same four fields: `used_percent`, `remaining_percent`, `resets_at` (ISO 8601, always `+00:00` for UTC, never `Z`), `reset_after_seconds`. The top-level `providers` map is alphabetically sorted.
 
-## How It Works
+## v2 breaking changes (from v1.0.0)
 
-1. `usage-check` triggers the Chrome extension via AppleScript (opens a 1×1 pixel window — Chrome stays in the background).
-2. The extension opens tabs to `claude.ai`, `chatgpt.com`, and `github.com` inside that hidden window.
-3. It runs `fetch()` inside the page context using your existing browser sessions.
-4. Results are sent to a native messaging host which writes them to `.cache/`.
-5. The CLI reads the cached JSON and renders it.
+- **JSON is now the default.** `-h`/`--human` opts into text. The old `--json` flag is removed (use bare `usage-check`).
+- **Distribution:** Go binary via `go install`. The TypeScript + Chrome extension + native messaging host architecture is gone; the v1 sources are preserved at the [`v1.0.0` tag](https://github.com/drogers0/llm-usage/releases/tag/v1.0.0) and the `legacy/typescript-chrome-extension` branch.
 
-## Troubleshooting
+## License
 
-- **`Missing EXTENSION_ID in .env`** — Run `usage-check-setup <extension-id>`.
-- **`Timed out waiting for extension fetch`** — Make sure Chrome is running and you're logged in to the services.
-- **Extension not working after Chrome update** — Reload at `chrome://extensions` and re-run `usage-check-setup`.
-- **`Missing renderer: dist/cli/render.js`** — Run `npm run build`.
-
-## Security
-
-- `.env` and `.cache/` are gitignored.
-- Cached responses contain only usage percentages, not credentials.
-- The native messaging host only writes to files inside this project directory.
+MIT — see [LICENSE](LICENSE).
