@@ -85,13 +85,13 @@ func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 
 	if w := raw.RateLimit.PrimaryWindow; w != nil {
 		if w.LimitWindowSeconds != primaryWindowSeconds {
-			return providers.ProviderOutput{}, fmt.Errorf("codex primary_window has unexpected limit_window_seconds=%d (want %d); OpenAI may have changed the /backend-api/wham/usage shape — please file an issue at https://github.com/drogers0/llm-usage/issues", w.LimitWindowSeconds, primaryWindowSeconds)
+			return providers.ProviderOutput{}, fmt.Errorf("codex primary_window has unexpected limit_window_seconds=%d (want %d); OpenAI may have changed the /backend-api/wham/usage shape — please file an issue at %s", w.LimitWindowSeconds, primaryWindowSeconds, providers.IssueTrackerURL)
 		}
 		limits["five_hour"] = w.toLimit(now)
 	}
 	if w := raw.RateLimit.SecondaryWindow; w != nil {
 		if w.LimitWindowSeconds != secondaryWindowSeconds {
-			return providers.ProviderOutput{}, fmt.Errorf("codex secondary_window has unexpected limit_window_seconds=%d (want %d); OpenAI may have changed the /backend-api/wham/usage shape — please file an issue at https://github.com/drogers0/llm-usage/issues", w.LimitWindowSeconds, secondaryWindowSeconds)
+			return providers.ProviderOutput{}, fmt.Errorf("codex secondary_window has unexpected limit_window_seconds=%d (want %d); OpenAI may have changed the /backend-api/wham/usage shape — please file an issue at %s", w.LimitWindowSeconds, secondaryWindowSeconds, providers.IssueTrackerURL)
 		}
 		limits["seven_day"] = w.toLimit(now)
 	}

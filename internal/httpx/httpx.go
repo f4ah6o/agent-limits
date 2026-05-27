@@ -35,6 +35,12 @@ type Doer struct {
 	Debug        io.Writer         // nil disables per-request logging; pass a *ConcurrencySafeWriter when sharing across providers
 }
 
+// maxBodyBytes caps the response body size GetJSON will read. Real provider
+// payloads are well under 100 KB; 1 MiB is defensive headroom. Over-limit
+// bodies are returned as a plain error (no ErrTransient wrap — see D7 in
+// REVIEW_RESOLUTION_PLAN.md): they don't resolve in a 200 ms retry.
+const maxBodyBytes = 1 << 20
+
 // Classifier maps a non-200 response to a provider-specific error. The url is
 // the FINAL url returned by the server (post-redirect) so the returned error
 // can identify which endpoint actually responded.
@@ -76,7 +82,7 @@ func (d *Doer) GetJSON(ctx context.Context, url, token string, dst any, classify
 		finalURL = resp.Request.URL.String()
 	}
 
-	body, readErr := io.ReadAll(resp.Body)
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
 	if readErr != nil {
 		d.log(finalURL, readErr.Error(), elapsed)
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -84,10 +90,20 @@ func (d *Doer) GetJSON(ctx context.Context, url, token string, dst any, classify
 		}
 		return fmt.Errorf("%w: reading response body from %s: %s", providers.ErrTransient, finalURL, readErr.Error())
 	}
-
+	// Status classification runs before the size guard so an oversized error
+	// page (e.g. a 401 returning a 2 MiB HTML page from a misconfigured
+	// proxy) still surfaces as ErrAuthDenied/ErrTransient. The classifier's
+	// body argument is capped at maxBodyBytes+1; Snip truncates further.
 	if resp.StatusCode != 200 {
 		d.log(finalURL, fmt.Sprintf("HTTP %d", resp.StatusCode), elapsed)
 		return classify(finalURL, resp.StatusCode, body)
+	}
+	// Size guard applies to successful responses where we'd otherwise try to
+	// unmarshal the body. An oversized 200 is a contract violation we won't
+	// pretend to handle.
+	if int64(len(body)) > maxBodyBytes {
+		d.log(finalURL, fmt.Sprintf("body exceeds %d bytes", maxBodyBytes), elapsed)
+		return fmt.Errorf("response body from %s exceeds %d bytes", finalURL, maxBodyBytes)
 	}
 	d.log(finalURL, "ok", elapsed)
 	if err := json.Unmarshal(body, dst); err != nil {

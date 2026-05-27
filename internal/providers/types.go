@@ -27,6 +27,11 @@ const iso8601Layout = "2006-01-02T15:04:05-07:00"
 // derive from this slice. Treat as immutable.
 var KnownProviderIDs = []string{"claude", "codex", "copilot"}
 
+// IssueTrackerURL is the upstream issue tracker. Cited in provider error
+// messages emitted when an upstream-API shape change is detected, so users
+// can file a bug with the exact context already in the message.
+const IssueTrackerURL = "https://github.com/drogers0/llm-usage/issues"
+
 // Title returns the provider ID with its first byte upper-cased. Provider IDs
 // in this package are ASCII; do not use for arbitrary strings.
 func Title(id string) string {

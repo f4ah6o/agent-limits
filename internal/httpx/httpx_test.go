@@ -267,6 +267,53 @@ func TestGetJSON_PartialReadDuringCancel(t *testing.T) {
 	}
 }
 
+func TestGetJSON_BodyTooLarge(t *testing.T) {
+	payload := bytes.Repeat([]byte("x"), maxBodyBytes+1024)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(payload)
+	}))
+	defer srv.Close()
+	d := newDoer(t, srv.Client())
+	var dst struct{ Foo int }
+	err := d.GetJSON(context.Background(), srv.URL, "tok", &dst, DefaultClassify)
+	if err == nil {
+		t.Fatal("expected error for oversized body")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, srv.URL) {
+		t.Errorf("error should name URL, got: %v", err)
+	}
+	if !strings.Contains(msg, "1048576") {
+		t.Errorf("error should name byte limit (1048576), got: %v", err)
+	}
+	if errors.Is(err, providers.ErrTransient) {
+		t.Errorf("over-limit body should NOT be classified ErrTransient (would trigger retry): %v", err)
+	}
+	if errors.Is(err, providers.ErrAuthDenied) {
+		t.Errorf("over-limit body should NOT be classified ErrAuthDenied: %v", err)
+	}
+}
+
+func TestGetJSON_OversizedNon200StillClassified(t *testing.T) {
+	// Defensive: an upstream returning a 2 MiB HTML error page on a 401 must
+	// still classify as ErrAuthDenied. The size guard only applies to 200s.
+	payload := bytes.Repeat([]byte("x"), maxBodyBytes+1024)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(401)
+		w.Write(payload)
+	}))
+	defer srv.Close()
+	d := newDoer(t, srv.Client())
+	var dst struct{}
+	err := d.GetJSON(context.Background(), srv.URL, "tok", &dst, DefaultClassify)
+	if !errors.Is(err, providers.ErrAuthDenied) {
+		t.Errorf("oversized 401 must classify as ErrAuthDenied, got: %v", err)
+	}
+	if strings.Contains(err.Error(), "exceeds") {
+		t.Errorf("oversized 401 must not surface as a size error, got: %v", err)
+	}
+}
+
 func TestSnip(t *testing.T) {
 	if Snip([]byte("short")) != "short" {
 		t.Errorf("short string truncated")

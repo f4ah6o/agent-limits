@@ -24,10 +24,9 @@ const (
 )
 
 // planQuota maps GitHub Copilot plan slugs (from /user.plan.name) to their
-// monthly premium-request quotas.
-//
-// Source: https://docs.github.com/en/copilot/get-started/plans (verified
-// 2026-05-26). Unknown slugs fall back to defaultQuota with a warn callback.
+// monthly premium-request quotas. Source:
+// https://docs.github.com/en/copilot/get-started/plans. Unknown slugs
+// fall back to defaultQuota with a warn callback.
 var planQuota = map[string]int{
 	"free":       50,
 	"pro":        300,
@@ -161,7 +160,7 @@ func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 	// Keep emitting 0% (a brand-new account with no premium usage produces
 	// the same result), but warn the user that the result may be suspect.
 	if copilotProductItems > 0 && !sawPremiumSku && c.warn != nil {
-		c.warn(`copilot: Copilot-product usageItems present but none matched sku="Copilot Premium Request" — GitHub may have renamed the SKU; please file an issue at https://github.com/drogers0/llm-usage/issues`)
+		c.warn(`copilot: Copilot-product usageItems present but none matched sku="Copilot Premium Request" — GitHub may have renamed the SKU; please file an issue at ` + providers.IssueTrackerURL)
 	}
 	// Clamp to 100: the Limit contract uses a [0,100] convention. Overage
 	// detail lives in the API's discountQuantity/netQuantity fields but is
