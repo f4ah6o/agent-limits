@@ -78,7 +78,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	human := fs.Bool("human", false, "")
 	fs.BoolVar(human, "h", false, "")
-	debug := fs.Bool("debug", false, "")
+	debugFlag := fs.Bool("debug", false, "")
 	help := fs.Bool("help", false, "")
 	versionFlag := fs.Bool("version", false, "")
 	fakeFn := registerFakeMode(fs) // nil unless built with -tags=fake
@@ -104,39 +104,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	requested := selectedProviders(service)
 
-	var debugWriter io.Writer
-	if *debug {
-		debugWriter = stderr
-	}
-
-	var chosen []providers.Provider
-	var orchDebug io.Writer
-	if fakeFn != nil {
-		chosen = fakeFn()
-	}
-	if chosen == nil {
-		var safeStderr io.Writer
-		chosen, safeStderr = realProviders(debugWriter, stderr)
-		if *debug {
-			orchDebug = safeStderr
-		}
-	} else if *debug {
-		// Fake mode: no copilot warn writer to share with, but multiple fake
-		// providers still write debug lines concurrently. Wrap stderr so
-		// per-provider lines don't interleave mid-write.
-		orchDebug = &httpx.ConcurrencySafeWriter{W: debugWriter}
-	}
-
-	available := map[string]providers.Provider{}
-	for _, p := range chosen {
-		available[p.ID()] = p
-	}
-	var missing []string
-	for _, id := range requested {
-		if _, ok := available[id]; !ok {
-			missing = append(missing, id)
-		}
-	}
+	safeStderr := &httpx.ConcurrencySafeWriter{W: stderr}
+	chosen, orchDebug, missing := buildProviders(safeStderr, *debugFlag, fakeFn, requested)
 	if len(missing) > 0 {
 		fmt.Fprintf(stderr, "provider not available: %s\n", strings.Join(missing, ", "))
 		return 2

@@ -12,7 +12,7 @@ import (
 // validation would silently flag it as "provider not available". This test
 // fails at build time instead.
 func TestRealProvidersCoversKnownIDs(t *testing.T) {
-	list, _ := realProviders(nil, io.Discard)
+	list := realProviders(io.Discard, false)
 	got := map[string]bool{}
 	for _, p := range list {
 		got[p.ID()] = true
