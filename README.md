@@ -69,8 +69,6 @@ Even without `--debug`, the Copilot provider may emit one diagnostic line to std
 
 The exit code and stdout payload are unaffected — this is a heads-up that the underlying number may be stale. With `--debug`, additional per-request and per-provider lines are also written to stderr.
 
-On Linux, if `~/.claude/.credentials.json` is world- or group-readable, one warning line is also written to stderr; the read proceeds.
-
 ## Authentication
 
 If a provider's credential is missing, the error message names the exact command to fix it. For Copilot, the `user` scope is required:
