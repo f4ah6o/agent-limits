@@ -43,6 +43,27 @@ func newTestClient(t *testing.T, body []byte, status int, captureReq *http.Reque
 		},
 		endpoint:  srv.URL + "/api/oauth/usage",
 		readToken: func(ctx context.Context) (string, error) { return "sk-ant-oat01-fake", nil },
+		now:       time.Now,
+	}
+}
+
+func TestFetch_ResetAfterSecondsTruncated(t *testing.T) {
+	// Frozen clock with a non-zero sub-second component. Without truncation,
+	// the residue shaves a second off ResetAfterSeconds via int(...) rounding
+	// toward zero; with truncation, it does not. Removing .Truncate(time.Second)
+	// in claude.go's Fetch yields want-1.
+	frozen := time.Date(2026, 5, 15, 12, 34, 56, 789_000_000, time.UTC)
+	resetsAt := frozen.Add(3 * time.Hour).Truncate(time.Second)
+	body := []byte(`{"five_hour":{"utilization":50,"resets_at":"` + resetsAt.Format(time.RFC3339Nano) + `"}}`)
+	c := newTestClient(t, body, 200, nil)
+	c.now = func() time.Time { return frozen }
+	out, err := c.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := int(resetsAt.Sub(frozen.Truncate(time.Second)).Seconds())
+	if got := out.Limits["five_hour"].ResetAfterSeconds; got != want {
+		t.Errorf("ResetAfterSeconds = %d, want %d (regression: removing .Truncate(time.Second) yields want-1)", got, want)
 	}
 }
 
@@ -168,6 +189,7 @@ func TestFetch_NetworkErrorIsTransient(t *testing.T) {
 		doer:      &httpx.Doer{Client: srv.Client(), UserAgent: "usage-check-test/0", ProviderID: "claude"},
 		endpoint:  srv.URL,
 		readToken: func(ctx context.Context) (string, error) { return "tok", nil },
+		now:       time.Now,
 	}
 	_, err := c.Fetch(context.Background())
 	if !errors.Is(err, providers.ErrTransient) {
@@ -184,6 +206,7 @@ func TestFetch_CancelledContextIsNotTransient(t *testing.T) {
 		doer:      &httpx.Doer{Client: srv.Client(), UserAgent: "usage-check-test/0", ProviderID: "claude"},
 		endpoint:  srv.URL,
 		readToken: func(ctx context.Context) (string, error) { return "tok", nil },
+		now:       time.Now,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

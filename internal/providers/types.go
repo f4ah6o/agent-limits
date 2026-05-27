@@ -83,7 +83,7 @@ func (l Limit) MarshalJSON() ([]byte, error) {
 	}{
 		UsedPercent:       roundPct(l.UsedPercent),
 		RemainingPercent:  roundPct(l.RemainingPercent),
-		ResetsAt:          l.ResetsAt.Format(iso8601Layout),
+		ResetsAt:          l.ResetsAt.UTC().Format(iso8601Layout),
 		ResetAfterSeconds: l.ResetAfterSeconds,
 	})
 }
@@ -103,7 +103,7 @@ func (r Report) MarshalJSON() ([]byte, error) {
 		CheckedAt string                    `json:"checked_at"`
 		Providers map[string]ProviderResult `json:"providers"`
 	}{
-		CheckedAt: r.CheckedAt.Format(iso8601Layout),
+		CheckedAt: r.CheckedAt.UTC().Format(iso8601Layout),
 		Providers: r.Providers,
 	})
 }

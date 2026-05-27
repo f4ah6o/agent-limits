@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -39,6 +40,28 @@ func newTestClient(t *testing.T, body []byte, status int, captureReq *http.Reque
 		doer:      &httpx.Doer{Client: srv.Client(), UserAgent: "usage-check-test/0", ProviderID: "codex"},
 		endpoint:  srv.URL + "/backend-api/wham/usage",
 		readToken: func(ctx context.Context) (string, error) { return "fake-jwt", nil },
+		now:       time.Now,
+	}
+}
+
+func TestFetch_ResetAfterSecondsTruncated(t *testing.T) {
+	// Frozen clock with a non-zero sub-second component. Without truncation,
+	// the residue shaves a second off ResetAfterSeconds via int(...) rounding
+	// toward zero. Removing .Truncate(time.Second) in codex.go's Fetch yields
+	// want-1.
+	frozen := time.Date(2026, 5, 15, 12, 34, 56, 789_000_000, time.UTC)
+	resetAt := frozen.Add(3 * time.Hour).Truncate(time.Second).Unix()
+	body := []byte(`{"rate_limit":{"primary_window":{"used_percent":1,"limit_window_seconds":18000,"reset_at":` +
+		strconv.FormatInt(resetAt, 10) + `}}}`)
+	c := newTestClient(t, body, 200, nil)
+	c.now = func() time.Time { return frozen }
+	out, err := c.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := 3 * 3600
+	if got := out.Limits["five_hour"].ResetAfterSeconds; got != want {
+		t.Errorf("ResetAfterSeconds = %d, want %d (regression: removing .Truncate(time.Second) yields want-1)", got, want)
 	}
 }
 
@@ -237,6 +260,39 @@ func TestFetch_NullRateLimit(t *testing.T) {
 	}
 }
 
+func TestFetch_PrimaryWindowResetAtZero_Skipped(t *testing.T) {
+	// A primary_window with reset_at=0 (the inactive-window upstream shape)
+	// must be skipped uniformly — same guard as code_review_rate_limit. Without
+	// this, the window would be emitted with ResetsAt=1970-01-01.
+	body := []byte(`{"rate_limit":{"primary_window":{"used_percent":0,"limit_window_seconds":18000,"reset_at":0},"secondary_window":{"used_percent":0,"limit_window_seconds":604800,"reset_at":1780429056}}}`)
+	c := newTestClient(t, body, 200, nil)
+	out, err := c.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := out.Limits["five_hour"]; ok {
+		t.Errorf("five_hour must be skipped when primary_window.reset_at == 0")
+	}
+	if _, ok := out.Limits["seven_day"]; !ok {
+		t.Errorf("seven_day should still be present alongside skipped five_hour")
+	}
+}
+
+func TestFetch_SecondaryWindowResetAtZero_Skipped(t *testing.T) {
+	body := []byte(`{"rate_limit":{"primary_window":{"used_percent":1,"limit_window_seconds":18000,"reset_at":1779842256},"secondary_window":{"used_percent":0,"limit_window_seconds":604800,"reset_at":0}}}`)
+	c := newTestClient(t, body, 200, nil)
+	out, err := c.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := out.Limits["seven_day"]; ok {
+		t.Errorf("seven_day must be skipped when secondary_window.reset_at == 0")
+	}
+	if _, ok := out.Limits["five_hour"]; !ok {
+		t.Errorf("five_hour should still be present alongside skipped seven_day")
+	}
+}
+
 func TestFetch_CodeReviewSkippedOnZeroResetAt(t *testing.T) {
 	body := []byte(`{"rate_limit":{"primary_window":{"used_percent":1,"limit_window_seconds":18000,"reset_at":1779842256},"secondary_window":{"used_percent":0,"limit_window_seconds":604800,"reset_at":1780429056}},"code_review_rate_limit":{"used_percent":0,"limit_window_seconds":0,"reset_at":0}}`)
 	c := newTestClient(t, body, 200, nil)
@@ -299,6 +355,7 @@ func TestFetch_NetworkErrorIsTransient(t *testing.T) {
 		doer:      &httpx.Doer{Client: srv.Client(), UserAgent: "usage-check-test/0", ProviderID: "codex"},
 		endpoint:  srv.URL,
 		readToken: func(ctx context.Context) (string, error) { return "tok", nil },
+		now:       time.Now,
 	}
 	_, err := c.Fetch(context.Background())
 	if !errors.Is(err, providers.ErrTransient) {
@@ -315,6 +372,7 @@ func TestFetch_CancelledContextIsNotTransient(t *testing.T) {
 		doer:      &httpx.Doer{Client: srv.Client(), UserAgent: "usage-check-test/0", ProviderID: "codex"},
 		endpoint:  srv.URL,
 		readToken: func(ctx context.Context) (string, error) { return "tok", nil },
+		now:       time.Now,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

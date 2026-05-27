@@ -124,7 +124,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if renderErr != nil {
 		fmt.Fprintln(stderr, renderErr.Error())
-		return 2
+		return 1
 	}
 	return int(status)
 }

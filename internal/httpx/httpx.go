@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -126,8 +127,21 @@ func (d *Doer) log(url, outcome string, elapsed time.Duration) {
 	}
 	// Single Fprintf so the underlying writer sees one Write call per line.
 	// When multiple Doers share a writer, the writer is responsible for
-	// serialization (see ConcurrencySafeWriter).
-	fmt.Fprintf(d.Debug, "[debug] %s: GET %s -> %s (%dms)\n", d.ProviderID, url, outcome, elapsed.Milliseconds())
+	// serialization (see ConcurrencySafeWriter). outcome can carry an
+	// upstream error body via Snip — sanitize so embedded newlines don't
+	// fracture the [debug] line into multiple physical lines.
+	fmt.Fprintf(d.Debug, "[debug] %s: GET %s -> %s (%dms)\n", d.ProviderID, url, SanitizeDebugLine(outcome), elapsed.Milliseconds())
+}
+
+// SanitizeDebugLine collapses control characters (notably CR and LF) in s
+// using Go's quoted-string escaping, then strips the outer quotes Quote
+// would add. Result is always a single physical line, safe to substitute
+// into a Fprintf template that ends with a single "\n". Embedded "
+// characters survive as "\"" because Quote escapes them before adding the
+// wrapping pair, so byte-slice trim is safe regardless of input.
+func SanitizeDebugLine(s string) string {
+	q := strconv.Quote(s)
+	return q[1 : len(q)-1]
 }
 
 // Snip truncates body to 200 bytes for inclusion in error messages.

@@ -22,12 +22,26 @@ func TestLimitMarshalJSON_UTC(t *testing.T) {
 }
 
 func TestLimitMarshalJSON_NonUTC(t *testing.T) {
+	// A non-UTC input must be normalized to "+00:00". The JSON contract
+	// documented in README.md is "ISO 8601, always +00:00 for UTC, never Z";
+	// MarshalJSON enforces .UTC() at the boundary so a future provider that
+	// forgets to call .UTC() does not silently leak a local offset.
 	est := time.FixedZone("EST", -5*3600)
-	at := time.Date(2026, 5, 26, 15, 0, 0, 0, est)
+	at := time.Date(2026, 5, 26, 15, 0, 0, 0, est) // 20:00 UTC
 	l := Limit{ResetsAt: at}
 	b, _ := json.Marshal(l)
-	if !strings.Contains(string(b), `"resets_at":"2026-05-26T15:00:00-05:00"`) {
-		t.Fatalf("got %s", string(b))
+	if !strings.Contains(string(b), `"resets_at":"2026-05-26T20:00:00+00:00"`) {
+		t.Fatalf("non-UTC ResetsAt must be normalized to +00:00; got %s", string(b))
+	}
+}
+
+func TestReportMarshalJSON_NonUTC(t *testing.T) {
+	est := time.FixedZone("EST", -5*3600)
+	at := time.Date(2026, 5, 26, 15, 0, 0, 0, est) // 20:00 UTC
+	r := Report{CheckedAt: at, Providers: map[string]ProviderResult{}}
+	b, _ := json.Marshal(r)
+	if !strings.Contains(string(b), `"checked_at":"2026-05-26T20:00:00+00:00"`) {
+		t.Fatalf("non-UTC CheckedAt must be normalized to +00:00; got %s", string(b))
 	}
 }
 

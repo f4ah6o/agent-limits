@@ -22,12 +22,19 @@ func realProviders(safeStderr *httpx.ConcurrencySafeWriter, includeDebug bool) [
 		debugSink = safeStderr
 	}
 	ua := userAgent()
-	warn := func(s string) { fmt.Fprintln(safeStderr, "usage-check: "+s) }
 	return []providers.Provider{
 		claude.New(debugSink, ua),
 		codex.New(debugSink, ua),
-		copilot.New(debugSink, ua, copilot.WithWarn(warn)),
+		copilot.New(debugSink, ua, copilot.WithWarn(wrapWarn(safeStderr))),
 	}
+}
+
+// wrapWarn returns the warn callback wired into copilot.New. Every line the
+// provider emits is prefixed with "usage-check: " so the source is obvious
+// when --debug is OFF and only the SKU-drift line surfaces. Extracted from
+// realProviders so the prefix contract is unit-testable without HTTP.
+func wrapWarn(out io.Writer) func(string) {
+	return func(s string) { fmt.Fprintln(out, "usage-check: "+s) }
 }
 
 // buildProviders resolves the provider set (fake-mode-first), picks the

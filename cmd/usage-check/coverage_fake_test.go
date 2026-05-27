@@ -12,7 +12,7 @@ import (
 // Runs only under `go test -tags=fake ./cmd/usage-check`.
 func TestFakeProvidersCoversKnownIDs(t *testing.T) {
 	got := map[string]bool{}
-	for _, p := range fakeProviders() {
+	for _, p := range fakeProviders("") {
 		got[p.ID()] = true
 	}
 	for _, id := range providers.KnownProviderIDs {

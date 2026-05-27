@@ -33,10 +33,22 @@ type Client struct {
 	doer      *httpx.Doer
 	endpoint  string
 	readToken func(context.Context) (string, error)
+	// now is the clock-of-record for ResetAfterSeconds truncation. New
+	// initializes to time.Now; tests override via WithNow or by direct
+	// field assignment.
+	now func() time.Time
 }
 
-func New(debug io.Writer, userAgent string) *Client {
-	return &Client{
+// Option mutates a Client at construction time.
+type Option func(*Client)
+
+// WithNow overrides the clock-of-record used to compute ResetAfterSeconds.
+// Defaults to time.Now. Intended for tests; production callers should not
+// override.
+func WithNow(fn func() time.Time) Option { return func(c *Client) { c.now = fn } }
+
+func New(debug io.Writer, userAgent string, opts ...Option) *Client {
+	c := &Client{
 		doer: &httpx.Doer{
 			Client:     &http.Client{}, // ctx-scoped deadline in Fetch replaces a per-client Timeout.
 			UserAgent:  userAgent,
@@ -45,7 +57,12 @@ func New(debug io.Writer, userAgent string) *Client {
 		},
 		endpoint:  endpoint,
 		readToken: cred.ReadCodexToken,
+		now:       time.Now,
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 func (c *Client) ID() string { return "codex" }
@@ -85,34 +102,36 @@ func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 		return providers.ProviderOutput{}, errors.New("codex usage response missing rate_limit object")
 	}
 
-	// See claude.go: the orchestrator's checked_at uses a separate time.Now();
-	// reset_after_seconds + checked_at may differ from resets_at by up to one
-	// second.
-	now := time.Now().UTC().Truncate(time.Second)
+	// See claude.go: this `now` (production: time.Now; tests: WithNow) and
+	// the orchestrator's checked_at are separate clocks; reset_after_seconds
+	// + checked_at may differ from resets_at by up to one second.
+	now := c.now().UTC().Truncate(time.Second)
 	limits := map[string]providers.Limit{}
 
 	if w := raw.RateLimit.PrimaryWindow; w != nil {
 		if w.LimitWindowSeconds != primaryWindowSeconds {
 			return providers.ProviderOutput{}, fmt.Errorf("codex primary_window has unexpected limit_window_seconds=%d (want %d); OpenAI may have changed the /backend-api/wham/usage shape — please file an issue at %s", w.LimitWindowSeconds, primaryWindowSeconds, providers.IssueTrackerURL)
 		}
-		limits["five_hour"] = w.toLimit(now)
+		if lim, ok := w.toLimit(now); ok {
+			limits["five_hour"] = lim
+		}
 	}
 	if w := raw.RateLimit.SecondaryWindow; w != nil {
 		if w.LimitWindowSeconds != secondaryWindowSeconds {
 			return providers.ProviderOutput{}, fmt.Errorf("codex secondary_window has unexpected limit_window_seconds=%d (want %d); OpenAI may have changed the /backend-api/wham/usage shape — please file an issue at %s", w.LimitWindowSeconds, secondaryWindowSeconds, providers.IssueTrackerURL)
 		}
-		limits["seven_day"] = w.toLimit(now)
+		if lim, ok := w.toLimit(now); ok {
+			limits["seven_day"] = lim
+		}
 	}
 	// code_review_rate_limit's limit_window_seconds is intentionally not
-	// asserted — Codex hasn't documented an expected value.
-	//
-	// The ResetAt > 0 guard skips the inactive case where the window object
-	// is present but its fields are zero (observed for users who have not
-	// used code review). A real activated window will always have a non-zero
-	// epoch ResetAt; an epoch-0 value here would render as 1970-01-01 with
-	// zero seconds remaining, which is worse than absence.
-	if w := raw.CodeReviewRateLimit; w != nil && w.ResetAt > 0 {
-		limits["code_review_seven_day"] = w.toLimit(now)
+	// asserted — Codex hasn't documented an expected value. The ResetAt > 0
+	// guard lives in toLimit so all three windows are skipped uniformly when
+	// the upstream returns epoch-0 (see toLimit doc).
+	if w := raw.CodeReviewRateLimit; w != nil {
+		if lim, ok := w.toLimit(now); ok {
+			limits["code_review_seven_day"] = lim
+		}
 	}
 
 	if len(limits) == 0 {
@@ -121,7 +140,16 @@ func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 	return providers.ProviderOutput{Limits: limits}, nil
 }
 
-func (w window) toLimit(now time.Time) providers.Limit {
+// toLimit converts a window object to a providers.Limit. Returns ok=false
+// when ResetAt is non-positive — observed when an inactive window object is
+// returned with zero fields (e.g. a code-review window for a user who has
+// never used the feature, or a freshly-created account with no usage in the
+// window). Rendering epoch-0 as 1970-01-01T00:00:00Z with zero seconds
+// remaining is worse than omitting the window entirely.
+func (w window) toLimit(now time.Time) (providers.Limit, bool) {
+	if w.ResetAt <= 0 {
+		return providers.Limit{}, false
+	}
 	resets := time.Unix(w.ResetAt, 0).UTC().Truncate(time.Second)
 	secs := int(resets.Sub(now).Seconds())
 	if secs < 0 {
@@ -132,5 +160,5 @@ func (w window) toLimit(now time.Time) providers.Limit {
 		RemainingPercent:  100 - w.UsedPercent,
 		ResetsAt:          resets,
 		ResetAfterSeconds: secs,
-	}
+	}, true
 }

@@ -209,6 +209,34 @@ func TestCLI_Help(t *testing.T) {
 	}
 }
 
+func TestCLI_FakeProviderFailureExits1(t *testing.T) {
+	// Round-6 contract: exit 1 for runtime failures (one or more requested
+	// providers failed at runtime), exit 2 reserved for usage / contract
+	// errors. The --fake-fail=claude knob injects a hard error in the
+	// claude provider's Fetch; the other two still succeed, so the JSON
+	// must contain claude.error AND codex.limits.
+	r := runBin("--fake", "--fake-fail=claude")
+	if r.code != 1 {
+		t.Fatalf("expected exit 1 for runtime failure, got %d (stderr %q)", r.code, r.stderr)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(r.stdout), &got); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, r.stdout)
+	}
+	provs, _ := got["providers"].(map[string]any)
+	claude, _ := provs["claude"].(map[string]any)
+	if claude["error"] == nil || claude["error"] == "" {
+		t.Errorf("expected claude.error to be populated, got %v", claude)
+	}
+	if claude["limits"] != nil {
+		t.Errorf("claude.limits should be omitted on failure, got %v", claude["limits"])
+	}
+	codex, _ := provs["codex"].(map[string]any)
+	if codex["limits"] == nil {
+		t.Errorf("expected codex.limits to still be present (a failing sibling does not block successes), got %v", codex)
+	}
+}
+
 func TestCLI_TwoPositionalsRejected(t *testing.T) {
 	r := runBin("claude", "codex")
 	if r.code != 2 {

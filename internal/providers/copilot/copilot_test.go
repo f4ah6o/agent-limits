@@ -149,6 +149,26 @@ func TestFetch_UnknownPlanDoesNotInvokeWarn(t *testing.T) {
 	}
 }
 
+func TestFetch_ZeroQuotaIsError(t *testing.T) {
+	// Inject a zero-quota entry to simulate a future bad config. Mutates a
+	// package-level map; this test must NOT call t.Parallel() — any other
+	// copilot test running concurrently against the "pro" plan during the
+	// mutation window would see quota=0. The other copilot tests today are
+	// sequential.
+	original := planQuota["pro"]
+	planQuota["pro"] = 0
+	t.Cleanup(func() { planQuota["pro"] = original })
+
+	c, _ := newRoutedClient(t, loadFixture(t, "user.json"), loadFixture(t, "usage.json"), 200, 200)
+	_, err := c.Fetch(context.Background())
+	if err == nil {
+		t.Fatal("expected error on zero quota")
+	}
+	if !strings.Contains(err.Error(), "zero quota") {
+		t.Errorf("error should mention zero quota, got: %v", err)
+	}
+}
+
 func TestFetch_OverageClampsAt100(t *testing.T) {
 	overage := []byte(`{"usageItems":[{"product":"Copilot","sku":"Copilot Premium Request","grossQuantity":400}]}`)
 	c, _ := newRoutedClient(t, loadFixture(t, "user.json"), overage, 200, 200)
@@ -316,6 +336,54 @@ func TestFetch_404MissingScope(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), cred.GitHubTokenMissingMessage) {
 		t.Errorf("error should embed exact message, got: %v", err)
+	}
+}
+
+func TestFetch_404_LowercaseNotFound(t *testing.T) {
+	body := []byte(`{"message":"not found"}`)
+	c, _ := newRoutedClient(t, loadFixture(t, "user.json"), body, 200, 404)
+	_, err := c.Fetch(context.Background())
+	if !errors.Is(err, providers.ErrAuthMissing) {
+		t.Errorf("lowercase \"not found\" must trip ErrAuthMissing, got: %v", err)
+	}
+}
+
+func TestFetch_404_ResourceNotFound(t *testing.T) {
+	body := []byte(`{"message":"Resource not found"}`)
+	c, _ := newRoutedClient(t, loadFixture(t, "user.json"), body, 200, 404)
+	_, err := c.Fetch(context.Background())
+	if !errors.Is(err, providers.ErrAuthMissing) {
+		t.Errorf("\"Resource not found\" must trip ErrAuthMissing, got: %v", err)
+	}
+}
+
+func TestFetch_404_UnknownMessage(t *testing.T) {
+	// A 404 with a JSON body but an unrecognized message must NOT be
+	// classified as missing-scope; the cause is genuinely something else.
+	body := []byte(`{"message":"Forbidden"}`)
+	c, _ := newRoutedClient(t, loadFixture(t, "user.json"), body, 200, 404)
+	_, err := c.Fetch(context.Background())
+	if errors.Is(err, providers.ErrAuthMissing) {
+		t.Errorf("unrecognized 404 message must NOT trip ErrAuthMissing, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "HTTP 404") {
+		t.Errorf("expected bare HTTP 404, got: %v", err)
+	}
+}
+
+func TestFetch_404_NonJSONBody(t *testing.T) {
+	// A 404 with a plain-text body (no JSON shape) must fall through to the
+	// default classifier. Under the prior substring match, body containing
+	// "Not Found" would have tripped the missing-scope path; the new JSON
+	// decode rejects that and we surface as bare HTTP 404.
+	body := []byte(`<html>Not Found</html>`)
+	c, _ := newRoutedClient(t, loadFixture(t, "user.json"), body, 200, 404)
+	_, err := c.Fetch(context.Background())
+	if errors.Is(err, providers.ErrAuthMissing) {
+		t.Errorf("non-JSON 404 must NOT trip ErrAuthMissing, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "HTTP 404") {
+		t.Errorf("expected bare HTTP 404, got: %v", err)
 	}
 }
 

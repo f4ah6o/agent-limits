@@ -152,6 +152,28 @@ func TestRun_DebugWritesPerAttempt(t *testing.T) {
 	}
 }
 
+func TestFetchOnce_DebugLineSingleLineOnMultilineError(t *testing.T) {
+	// Upstream-error bodies (e.g. an HTML 500 page) can include embedded
+	// newlines. The orchestrator's [debug] line must stay single-line so
+	// grep '\[debug\]' counts requests, not response paragraphs.
+	var buf bytes.Buffer
+	safe := &httpx.ConcurrencySafeWriter{W: &buf}
+	p := &stubProvider{id: "claude", results: []stubResult{
+		{err: fmt.Errorf("HTTP 500: <html>\nline two\nline three</html>")},
+	}}
+	Run(context.Background(), []string{"claude"}, []providers.Provider{p}, Options{Debug: safe})
+	out := buf.String()
+	if got := strings.Count(out, "\n"); got != 1 {
+		t.Errorf("expected exactly one newline in debug output, got %d:\n%s", got, out)
+	}
+	if !strings.Contains(out, `\n`) {
+		t.Errorf("expected escaped \\n in sanitized outcome, got:\n%s", out)
+	}
+	if !strings.HasPrefix(out, "[debug] claude:") {
+		t.Errorf("expected line to start with [debug] claude:, got:\n%s", out)
+	}
+}
+
 func TestRun_ContextCancellationDuringBackoff(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	p := &stubProvider{id: "claude", results: []stubResult{

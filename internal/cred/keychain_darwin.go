@@ -21,6 +21,14 @@ func ReadClaudeToken(ctx context.Context) (string, error) {
 	if err != nil {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
+			// /usr/bin/security exits 44 (errSecItemNotFound, defined in
+			// /usr/include/Security/SecBase.h) when the keychain item is
+			// absent. Prefer the exit code over the stderr substring; keep
+			// the substring as a fallback in case a future macOS version
+			// shifts the exit-code mapping.
+			if ee.ExitCode() == 44 {
+				return "", ErrClaudeTokenNotFound
+			}
 			stderr := strings.TrimSpace(string(ee.Stderr))
 			if strings.Contains(stderr, "could not be found") {
 				return "", ErrClaudeTokenNotFound

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/drogers0/llm-usage/internal/httpx"
 	"github.com/drogers0/llm-usage/internal/providers"
 )
 
@@ -22,7 +23,7 @@ type ExitStatus int
 
 const (
 	StatusOK        ExitStatus = 0
-	StatusAnyFailed ExitStatus = 2
+	StatusAnyFailed ExitStatus = 1
 )
 
 // Run fetches every requested provider concurrently, retries each once on
@@ -100,7 +101,10 @@ func fetchOnce(ctx context.Context, p providers.Provider, debug io.Writer, retry
 		}
 		outcome := "ok"
 		if err != nil {
-			outcome = err.Error()
+			// Sanitize: err.Error() may include an upstream Snip body with
+			// embedded newlines (HTML error pages, multi-line JSON). Keep
+			// the [debug] summary on one physical line.
+			outcome = httpx.SanitizeDebugLine(err.Error())
 		}
 		// Per-request URL detail comes from httpx.Doer. This summary line
 		// names the provider, total elapsed time, and (when applicable) the

@@ -2,6 +2,7 @@ package copilot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -28,8 +29,13 @@ var KnownWindows = []string{"month"}
 
 // planQuota maps GitHub Copilot plan slugs (from /user.plan.name) to their
 // monthly premium-request quotas. Source:
-// https://docs.github.com/en/copilot/get-started/plans. Unknown slugs
-// fail-close — see Fetch for the error path.
+// https://docs.github.com/en/copilot/get-started/plans.
+//
+// Unknown slugs fail-closed (Fetch returns an error → orchestrator marks
+// the provider failed → exit 1) by explicit design. We intentionally do NOT
+// support an env-var override: silent quota fabrication would lie to
+// scripted consumers about percent-used. When GitHub launches a new plan,
+// users file an issue and we ship an update.
 var planQuota = map[string]int{
 	"free":       50,
 	"pro":        300,
@@ -87,19 +93,6 @@ func New(debug io.Writer, userAgent string, opts ...Option) *Client {
 
 func (c *Client) ID() string { return "copilot" }
 
-// SetURLsForTest overrides the GitHub API URLs. Intended for tests and forks;
-// not part of the production-use API. Must be called before Fetch.
-func (c *Client) SetURLsForTest(userURL string, usageURL func(login string, year int, month int) string) {
-	c.userURL = userURL
-	c.usageURL = usageURL
-}
-
-// SetReadTokenForTest overrides the credential reader. Tests and forks only;
-// do not call in production code.
-func (c *Client) SetReadTokenForTest(fn func(context.Context) (string, error)) {
-	c.readToken = fn
-}
-
 type userResp struct {
 	Login string `json:"login"`
 	Plan  struct {
@@ -123,9 +116,23 @@ type usageResp struct {
 // ONLY on the billing call — the /user call must use DefaultClassify so that
 // a transient 404 from /user (during GitHub outages or endpoint deprecation)
 // is not mis-surfaced as "missing scope".
+//
+// The body is decoded as JSON and the `message` field is matched
+// case-insensitively against known GitHub "not-found" phrasings. A 404 with
+// no JSON body, or with a `message` we don't recognize, falls through to
+// DefaultClassify (surfaces as bare HTTP 404) so we never lie about the
+// cause.
 func classifyCopilot(url string, status int, body []byte) error {
-	if status == 404 && strings.Contains(string(body), "Not Found") {
-		return fmt.Errorf("%w: %s", providers.ErrAuthMissing, cred.GitHubTokenMissingMessage)
+	if status == 404 {
+		var env struct {
+			Message string `json:"message"`
+		}
+		if json.Unmarshal(body, &env) == nil {
+			m := strings.ToLower(strings.TrimSpace(env.Message))
+			if m == "not found" || m == "resource not found" {
+				return fmt.Errorf("%w: %s", providers.ErrAuthMissing, cred.GitHubTokenMissingMessage)
+			}
+		}
 	}
 	return httpx.DefaultClassify(url, status, body)
 }
@@ -155,6 +162,12 @@ func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 	if !ok {
 		return providers.ProviderOutput{}, fmt.Errorf(
 			"copilot plan %q is not in the known quota table; please file an issue at %s with your plan name (from /user.plan.name)",
+			user.Plan.Name, providers.IssueTrackerURL,
+		)
+	}
+	if quota <= 0 {
+		return providers.ProviderOutput{}, fmt.Errorf(
+			"copilot plan %q has zero quota in the known-quota table; this is a code bug, please file an issue at %s",
 			user.Plan.Name, providers.IssueTrackerURL,
 		)
 	}

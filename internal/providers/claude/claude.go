@@ -32,10 +32,22 @@ type Client struct {
 	doer      *httpx.Doer
 	endpoint  string
 	readToken func(context.Context) (string, error)
+	// now is the clock-of-record for ResetAfterSeconds truncation. New
+	// initializes to time.Now; tests override via WithNow or by direct
+	// field assignment.
+	now func() time.Time
 }
 
-func New(debug io.Writer, userAgent string) *Client {
-	return &Client{
+// Option mutates a Client at construction time.
+type Option func(*Client)
+
+// WithNow overrides the clock-of-record used to compute ResetAfterSeconds.
+// Defaults to time.Now. Intended for tests; production callers should not
+// override.
+func WithNow(fn func() time.Time) Option { return func(c *Client) { c.now = fn } }
+
+func New(debug io.Writer, userAgent string, opts ...Option) *Client {
+	c := &Client{
 		doer: &httpx.Doer{
 			Client:       &http.Client{}, // ctx-scoped deadline in Fetch replaces a per-client Timeout.
 			UserAgent:    userAgent,
@@ -45,7 +57,12 @@ func New(debug io.Writer, userAgent string) *Client {
 		},
 		endpoint:  endpoint,
 		readToken: cred.ReadClaudeToken,
+		now:       time.Now,
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 func (c *Client) ID() string { return "claude" }
@@ -72,12 +89,11 @@ func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 		return providers.ProviderOutput{}, err
 	}
 
-	// Note: this `now` and the orchestrator's checked_at are computed from
-	// separate time.Now() calls, so reset_after_seconds + checked_at may
-	// differ from resets_at by up to one second. Accepted as a known
-	// trade-off — using a single time source would require plumbing through
-	// the provider interface for marginal value.
-	now := time.Now().UTC().Truncate(time.Second)
+	// Note: this `now` (production: time.Now; tests: WithNow override) and
+	// the orchestrator's checked_at are computed from separate clocks, so
+	// reset_after_seconds + checked_at may differ from resets_at by up to
+	// one second. Accepted as a known trade-off.
+	now := c.now().UTC().Truncate(time.Second)
 	limits := map[string]providers.Limit{}
 	for _, key := range KnownWindows {
 		win := raw[key]

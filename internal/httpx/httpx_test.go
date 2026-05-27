@@ -24,6 +24,44 @@ func newDoer(t *testing.T, client *http.Client) *Doer {
 	}
 }
 
+func TestSanitizeDebugLine(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"plain", "plain"},
+		{"line one\nline two", `line one\nline two`},
+		{"with \"quotes\" inside", `with \"quotes\" inside`},
+		{"tab\there", `tab\there`},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := SanitizeDebugLine(c.in); got != c.want {
+			t.Errorf("SanitizeDebugLine(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestDoerLog_SanitizesNewlines(t *testing.T) {
+	// A non-200 with a multi-line body must produce a single physical
+	// debug line. Without sanitization, the embedded \n in the Snip'd body
+	// would emit a multi-line log entry.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(500)
+		w.Write([]byte("<html>\nline two\nline three</html>"))
+	}))
+	defer srv.Close()
+	var buf bytes.Buffer
+	d := newDoer(t, srv.Client())
+	d.Debug = &buf
+	var dst any
+	_ = d.GetJSON(context.Background(), srv.URL, "tok", &dst, DefaultClassify)
+	out := buf.String()
+	if got := strings.Count(out, "\n"); got != 1 {
+		t.Errorf("expected exactly one newline in debug output, got %d:\n%s", got, out)
+	}
+	if !strings.HasPrefix(out, "[debug] test: GET ") {
+		t.Errorf("expected [debug] prefix, got:\n%s", out)
+	}
+}
+
 func TestGetJSON_OKUnmarshals(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"foo":42}`))

@@ -57,7 +57,15 @@ Each provider has one credential source and one HTTPS endpoint:
 | Codex    | `~/.codex/auth.json` (populated by `codex login`) | `chatgpt.com/backend-api/wham/usage` |
 | Copilot  | `gh auth token` (populated by `gh auth login`; needs the `user` scope) | `api.github.com/users/{login}/settings/billing/premium_request/usage` |
 
-Providers are fetched in parallel. A failing provider does not block the others; the binary exits 0 only when every requested provider succeeded, otherwise exit 2. Each failed provider's error message is surfaced in the JSON (`providers.<id>.error`) and as `<Cap> usage: <error>` in text mode.
+Providers are fetched in parallel. A failing provider does not block the others; each failed provider's error message is surfaced in the JSON (`providers.<id>.error`) and as `<Cap> usage: <error>` in text mode. See [Exit codes](#exit-codes) below.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | All requested providers succeeded. |
+| 1 | One or more requested providers failed at runtime (transient HTTP, missing credentials, renderer error). |
+| 2 | Usage / contract error: unknown provider name, malformed flags, trailing positional argument, or a requested provider is not built into this binary. |
 
 ## Diagnostics on stderr
 

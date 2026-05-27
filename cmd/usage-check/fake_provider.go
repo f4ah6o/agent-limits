@@ -11,14 +11,20 @@ import (
 )
 
 type fakeProvider struct {
-	id string
+	id         string
+	shouldFail bool
 }
 
-func newFakeProvider(id string) *fakeProvider { return &fakeProvider{id: id} }
+func newFakeProvider(id string, shouldFail bool) *fakeProvider {
+	return &fakeProvider{id: id, shouldFail: shouldFail}
+}
 
 func (f *fakeProvider) ID() string { return f.id }
 
 func (f *fakeProvider) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
+	if f.shouldFail {
+		return providers.ProviderOutput{}, fmt.Errorf("fake injected failure for %s", f.id)
+	}
 	now := time.Now().UTC().Truncate(time.Second)
 	mk := func(used float64, in time.Duration) providers.Limit {
 		return providers.Limit{
