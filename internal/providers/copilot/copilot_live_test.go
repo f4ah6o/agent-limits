@@ -12,7 +12,7 @@ import (
 )
 
 func TestLive_RealAuthAndEndpoint(t *testing.T) {
-	c := New()
+	c := New(nil)
 	out, err := c.Fetch(context.Background())
 	if err != nil {
 		if errors.Is(err, providers.ErrAuthMissing) {

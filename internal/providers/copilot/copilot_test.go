@@ -2,6 +2,7 @@ package copilot
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -43,8 +44,8 @@ func newRoutedClient(t *testing.T, userFixture, usageFixture []byte, userStatus,
 	}))
 	t.Cleanup(srv.Close)
 
-	c := New(opts...)
-	c.http = srv.Client()
+	c := New(nil, opts...)
+	c.doer.Client = srv.Client()
 	c.readToken = func(ctx context.Context) (string, error) { return "gho_fake", nil }
 	c.userURL = srv.URL + "/user"
 	c.usageURL = func(login string, year int, month int) string {
@@ -59,6 +60,27 @@ type recordedReqs struct {
 
 func (r *recordedReqs) add(req *http.Request) {
 	r.reqs = append(r.reqs, req.Clone(context.Background()))
+}
+
+func TestFetch_JSONRoundsToTwoDecimals(t *testing.T) {
+	// Pro fixture: 23.4 + 126.0 + 10.0 = 159.4 gross, quota 300 → 53.13333…%.
+	// Raw struct value is unrounded; JSON output is rounded to 2 dp.
+	c, _ := newRoutedClient(t, loadFixture(t, "user.json"), loadFixture(t, "usage.json"), 200, 200)
+	out, err := c.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := out.Limits["month"].UsedPercent
+	if raw < 53.133 || raw > 53.134 {
+		t.Errorf("raw struct UsedPercent should be unrounded (~53.1333), got %v", raw)
+	}
+	b, err := json.Marshal(out.Limits["month"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"used_percent":53.13`) {
+		t.Errorf("JSON should round to 53.13, got %s", string(b))
+	}
 }
 
 func TestFetch_GoldenFlow_Pro(t *testing.T) {
@@ -221,8 +243,8 @@ func TestFetch_408IsTransient(t *testing.T) {
 func TestFetch_NetworkErrorIsTransient(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	srv.Close()
-	c := New()
-	c.http = srv.Client()
+	c := New(nil)
+	c.doer.Client = srv.Client()
 	c.userURL = srv.URL + "/user"
 	c.readToken = func(ctx context.Context) (string, error) { return "tok", nil }
 	_, err := c.Fetch(context.Background())
@@ -236,8 +258,8 @@ func TestFetch_CancelledContextIsNotTransient(t *testing.T) {
 		time.Sleep(time.Second)
 	}))
 	defer srv.Close()
-	c := New()
-	c.http = srv.Client()
+	c := New(nil)
+	c.doer.Client = srv.Client()
 	c.userURL = srv.URL + "/user"
 	c.readToken = func(ctx context.Context) (string, error) { return "tok", nil }
 	ctx, cancel := context.WithCancel(context.Background())

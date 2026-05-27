@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/drogers0/llm-usage/internal/cred"
+	"github.com/drogers0/llm-usage/internal/httpx"
 	"github.com/drogers0/llm-usage/internal/providers"
 )
 
@@ -34,7 +35,12 @@ func newTestClient(t *testing.T, body []byte, status int, captureReq *http.Reque
 	}))
 	t.Cleanup(srv.Close)
 	return &Client{
-		http:      srv.Client(),
+		doer: &httpx.Doer{
+			Client:       srv.Client(),
+			UserAgent:    userAgent,
+			ProviderID:   "claude",
+			ExtraHeaders: map[string]string{"Anthropic-Beta": betaHeader},
+		},
 		endpoint:  srv.URL + "/api/oauth/usage",
 		readToken: func(ctx context.Context) (string, error) { return "sk-ant-oat01-fake", nil },
 	}
@@ -159,7 +165,7 @@ func TestFetch_NetworkErrorIsTransient(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	srv.Close() // shut down before any request
 	c := &Client{
-		http:      srv.Client(),
+		doer:      &httpx.Doer{Client: srv.Client(), UserAgent: userAgent, ProviderID: "claude"},
 		endpoint:  srv.URL,
 		readToken: func(ctx context.Context) (string, error) { return "tok", nil },
 	}
@@ -175,7 +181,7 @@ func TestFetch_CancelledContextIsNotTransient(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := &Client{
-		http:      srv.Client(),
+		doer:      &httpx.Doer{Client: srv.Client(), UserAgent: userAgent, ProviderID: "claude"},
 		endpoint:  srv.URL,
 		readToken: func(ctx context.Context) (string, error) { return "tok", nil },
 	}

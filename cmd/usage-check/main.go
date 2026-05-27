@@ -14,34 +14,45 @@ import (
 	"github.com/drogers0/llm-usage/internal/render"
 )
 
-var knownServices = map[string]bool{"claude": true, "codex": true, "copilot": true}
+// version is overridden at build time via `-ldflags "-X main.version=..."`;
+// the release workflow injects the goreleaser-resolved tag.
+var version = "dev"
 
-const helpText = `usage-check — report Claude, Codex, and Copilot usage
+var knownServices = func() map[string]bool {
+	m := make(map[string]bool, len(providers.KnownProviderIDs))
+	for _, id := range providers.KnownProviderIDs {
+		m[id] = true
+	}
+	return m
+}()
 
-Usage:
-  usage-check [provider] [flags]
+var helpText = buildHelpText()
 
-Providers (optional):
-  claude    Only query Claude
-  codex     Only query Codex
-  copilot   Only query Copilot
-  (none)    Query all providers
-
-Flags:
-  -h, --human   Render human-readable text instead of JSON (default JSON)
-      --debug   Write per-provider URL, status, and timing to stderr
-      --help    Print this help and exit
-`
+func buildHelpText() string {
+	var sb strings.Builder
+	sb.WriteString("usage-check — report Claude, Codex, and Copilot usage\n\nUsage:\n  usage-check [provider] [flags]\n\nProviders (optional, must be the first argument):\n")
+	for _, id := range providers.KnownProviderIDs {
+		title := strings.ToUpper(id[:1]) + id[1:]
+		fmt.Fprintf(&sb, "  %-9s Only query %s\n", id, title)
+	}
+	sb.WriteString("  (none)    Query all providers\n\nFlags:\n  -h, --human   Render human-readable text instead of JSON (default JSON)\n      --debug   Write per-request and per-provider lines to stderr\n      --version Print version and exit\n      --help    Print this help and exit\n")
+	return sb.String()
+}
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	service, rest, err := extractService(args)
-	if err != nil {
-		fmt.Fprintln(stderr, err.Error())
-		return 2
+	var service string
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		if !knownServices[args[0]] {
+			fmt.Fprintf(stderr, "unexpected argument: %s (provider must be one of %s)\n",
+				args[0], strings.Join(providers.KnownProviderIDs, ", "))
+			return 2
+		}
+		service = args[0]
+		args = args[1:]
 	}
 
 	fs := flag.NewFlagSet("usage-check", flag.ContinueOnError)
@@ -52,9 +63,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.BoolVar(human, "h", false, "")
 	debug := fs.Bool("debug", false, "")
 	help := fs.Bool("help", false, "")
+	versionFlag := fs.Bool("version", false, "")
 	fake := fs.Bool("fake", false, "") // undocumented
 
-	if err := fs.Parse(rest); err != nil {
+	if err := fs.Parse(args); err != nil {
 		fmt.Fprintln(stderr, err.Error())
 		return 2
 	}
@@ -63,9 +75,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stdout, helpText)
 		return 0
 	}
+	if *versionFlag {
+		fmt.Fprintln(stdout, version)
+		return 0
+	}
 
 	if fs.NArg() > 0 {
-		fmt.Fprintf(stderr, "unexpected argument: %s (providers must be one of claude, codex, copilot)\n", fs.Arg(0))
+		fmt.Fprintf(stderr, "unexpected positional argument: %s (provider must come first, before any flags)\n", fs.Arg(0))
 		return 2
 	}
 
@@ -116,28 +132,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return int(status)
 }
 
-// extractService walks args once, pulls out the single positional
-// provider name (claude/codex/copilot), and returns the remaining args.
-// Two providers is an error; zero is "all".
-func extractService(args []string) (service string, rest []string, err error) {
-	rest = append([]string(nil), args...)
-	for i := 0; i < len(rest); i++ {
-		if !knownServices[rest[i]] {
-			continue
-		}
-		if service != "" {
-			return "", nil, fmt.Errorf("multiple providers specified: %s, %s", service, rest[i])
-		}
-		service = rest[i]
-		rest = append(rest[:i:i], rest[i+1:]...)
-		i--
-	}
-	return service, rest, nil
-}
-
 func selectedProviders(service string) []string {
 	if service == "" {
-		return []string{"claude", "codex", "copilot"}
+		return append([]string(nil), providers.KnownProviderIDs...)
 	}
 	return []string{service}
 }

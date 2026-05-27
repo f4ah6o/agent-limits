@@ -4,22 +4,32 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/drogers0/llm-usage/internal/httpx"
 	"github.com/drogers0/llm-usage/internal/providers"
 	"github.com/drogers0/llm-usage/internal/providers/claude"
 	"github.com/drogers0/llm-usage/internal/providers/codex"
 	"github.com/drogers0/llm-usage/internal/providers/copilot"
 )
 
-// realProviders returns the live providers. When debug is non-nil, the
-// Copilot provider routes its warn callback there.
+// realProviders returns the live providers. When debug is non-nil, all three
+// providers' Doers share a single ConcurrencySafeWriter so concurrent debug
+// lines from different goroutines do not interleave mid-line on stderr.
 func realProviders(debug io.Writer) []providers.Provider {
-	var copilotOpts []copilot.Option
+	var safeDebug io.Writer
 	if debug != nil {
+		safeDebug = &httpx.ConcurrencySafeWriter{W: debug}
+	}
+	var copilotOpts []copilot.Option
+	if safeDebug != nil {
 		copilotOpts = append(copilotOpts, copilot.WithWarn(func(s string) {
-			fmt.Fprintln(debug, "[debug] "+s)
+			fmt.Fprintln(safeDebug, "[debug] copilot: "+s)
 		}))
 	}
-	return []providers.Provider{claude.New(), codex.New(), copilot.New(copilotOpts...)}
+	return []providers.Provider{
+		claude.New(safeDebug),
+		codex.New(safeDebug),
+		copilot.New(safeDebug, copilotOpts...),
+	}
 }
 
 // fakeProviders returns deterministic in-process providers used by the

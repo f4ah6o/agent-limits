@@ -97,13 +97,10 @@ func fetchOnce(ctx context.Context, p providers.Provider, debug io.Writer, retry
 		if err != nil {
 			outcome = err.Error()
 		}
-		prefix := "GET "
-		if u, ok := p.(interface{ URL() string }); ok {
-			prefix = "GET " + u.URL() + " -> "
-		} else {
-			prefix = ""
-		}
-		fmt.Fprintf(debug, "[debug] %s: %s%s (%dms)%s\n", p.ID(), prefix, outcome, elapsed.Milliseconds(), suffix)
+		// Per-request URL detail comes from httpx.Doer. This summary line
+		// names the provider, total elapsed time, and (when applicable) the
+		// retry marker so a user can correlate against the underlying GET.
+		fmt.Fprintf(debug, "[debug] %s: %s (%dms)%s\n", p.ID(), outcome, elapsed.Milliseconds(), suffix)
 	}
 	return out, err
 }

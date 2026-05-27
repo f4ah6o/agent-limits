@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 )
 
-const CodexTokenMissingMessage = "Codex token not found at ~/.codex/auth.json — run `codex login`."
+const CodexTokenMissingMessage = "codex token not found at ~/.codex/auth.json — run `codex login`"
 
 var ErrCodexTokenNotFound = errors.New(CodexTokenMissingMessage)
 

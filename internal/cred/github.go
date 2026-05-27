@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-const GitHubTokenMissingMessage = "GitHub token unavailable — run `gh auth login`. If 'Not Found', run `gh auth refresh -h github.com -s user` to add the required scope."
+const GitHubTokenMissingMessage = "github token unavailable — run `gh auth login` (if 'Not Found', run `gh auth refresh -h github.com -s user` to add the required scope)"
 
 var ErrGitHubTokenNotFound = errors.New(GitHubTokenMissingMessage)
 
@@ -30,7 +30,7 @@ func ReadGitHubToken(ctx context.Context) (string, error) {
 		case errors.As(err, &ee):
 			return "", fmt.Errorf("%w: gh auth token failed: %s", ErrGitHubTokenNotFound, strings.TrimSpace(stderr.String()))
 		}
-		return "", fmt.Errorf("gh auth token failed: %w", err)
+		return "", fmt.Errorf("%w: gh auth token failed: %s", ErrGitHubTokenNotFound, err.Error())
 	}
 	token := strings.TrimSpace(string(out))
 	if token == "" {

@@ -71,7 +71,7 @@ func TestCLI_FakeJSON_All(t *testing.T) {
 }
 
 func TestCLI_FakeJSON_SingleProvider(t *testing.T) {
-	r := runBin("--fake", "claude")
+	r := runBin("claude", "--fake")
 	if r.code != 0 {
 		t.Fatalf("exit %d, stderr: %s", r.code, r.stderr)
 	}
@@ -107,8 +107,8 @@ func TestCLI_FakeText_DesignSampleShape(t *testing.T) {
 	}
 }
 
-func TestCLI_PositionalBeforeFlag(t *testing.T) {
-	r := runBin("--fake", "claude", "-h")
+func TestCLI_ProviderFirst(t *testing.T) {
+	r := runBin("claude", "--fake", "-h")
 	if r.code != 0 {
 		t.Fatalf("exit %d, stderr: %s", r.code, r.stderr)
 	}
@@ -120,10 +120,13 @@ func TestCLI_PositionalBeforeFlag(t *testing.T) {
 	}
 }
 
-func TestCLI_PositionalAfterFlag(t *testing.T) {
+func TestCLI_ProviderAfterFlagRejected(t *testing.T) {
 	r := runBin("--fake", "-h", "claude")
-	if r.code != 0 || !strings.Contains(r.stdout, "Claude usage") {
-		t.Fatalf("exit %d stdout %s", r.code, r.stdout)
+	if r.code != 2 {
+		t.Fatalf("expected exit 2, got %d (stdout %q)", r.code, r.stdout)
+	}
+	if !strings.Contains(r.stderr, "provider must come first") {
+		t.Fatalf("missing provider-must-come-first error: %s", r.stderr)
 	}
 }
 
@@ -136,7 +139,8 @@ func TestCLI_HumanLongForm(t *testing.T) {
 }
 
 func TestCLI_BogusPositional(t *testing.T) {
-	r := runBin("--fake", "bogus")
+	// Leading positional that isn't a known provider → naming-the-set error.
+	r := runBin("bogus")
 	if r.code != 2 {
 		t.Fatalf("expected exit 2, got %d", r.code)
 	}
@@ -148,6 +152,17 @@ func TestCLI_BogusPositional(t *testing.T) {
 	}
 	if !strings.Contains(r.stderr, "claude") || !strings.Contains(r.stderr, "codex") || !strings.Contains(r.stderr, "copilot") {
 		t.Fatalf("error should name valid providers: %s", r.stderr)
+	}
+}
+
+func TestCLI_TrailingPositionalRejected(t *testing.T) {
+	// Anything after flags is a trailing positional under the strict grammar.
+	r := runBin("--fake", "bogus")
+	if r.code != 2 {
+		t.Fatalf("expected exit 2, got %d", r.code)
+	}
+	if !strings.Contains(r.stderr, "unexpected positional argument: bogus") {
+		t.Fatalf("missing trailing-positional error: %s", r.stderr)
 	}
 }
 
@@ -194,12 +209,33 @@ func TestCLI_Help(t *testing.T) {
 	}
 }
 
-func TestCLI_TwoPositionals(t *testing.T) {
-	r := runBin("--fake", "claude", "codex")
+func TestCLI_TwoPositionalsRejected(t *testing.T) {
+	r := runBin("claude", "codex")
 	if r.code != 2 {
 		t.Fatalf("expected exit 2 for two providers, got %d", r.code)
 	}
-	if !strings.Contains(r.stderr, "multiple providers") {
-		t.Fatalf("missing multi-provider error: %s", r.stderr)
+	if !strings.Contains(r.stderr, "unexpected positional argument: codex") {
+		t.Fatalf("missing trailing-positional error: %s", r.stderr)
+	}
+}
+
+func TestCLI_Version(t *testing.T) {
+	r := runBin("--version")
+	if r.code != 0 {
+		t.Fatalf("expected exit 0, got %d (stderr %q)", r.code, r.stderr)
+	}
+	// Tests build without ldflags so the default `dev` value should appear.
+	// goreleaser injects the real tag at release time.
+	if got := strings.TrimSpace(r.stdout); got != "dev" {
+		t.Fatalf("expected version 'dev', got %q", got)
+	}
+}
+
+func TestHelp_ListsAllKnownProviders(t *testing.T) {
+	r := runBin("--help")
+	for _, id := range []string{"claude", "codex", "copilot"} {
+		if !strings.Contains(r.stdout, id) {
+			t.Errorf("help missing provider %q: %s", id, r.stdout)
+		}
 	}
 }

@@ -56,6 +56,18 @@ func TestLimitMarshalJSON_WholeNumberHasNoDecimal(t *testing.T) {
 	}
 }
 
+func TestLimitMarshalJSON_RoundsFloatArtifact(t *testing.T) {
+	l := Limit{UsedPercent: 67.339999999, RemainingPercent: 32.660000001}
+	b, _ := json.Marshal(l)
+	s := string(b)
+	if !strings.Contains(s, `"used_percent":67.34`) {
+		t.Errorf("float artifact not rounded; got %s", s)
+	}
+	if !strings.Contains(s, `"remaining_percent":32.66`) {
+		t.Errorf("float artifact not rounded; got %s", s)
+	}
+}
+
 func TestReportMarshalJSON(t *testing.T) {
 	at, _ := time.Parse(time.RFC3339, "2026-05-26T20:00:00Z")
 	r := Report{CheckedAt: at, Providers: map[string]ProviderResult{}}

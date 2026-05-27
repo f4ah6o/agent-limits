@@ -7,10 +7,10 @@ import (
 	"errors"
 )
 
-const ClaudeTokenMissingMessage = "Claude token not found in Keychain — run `claude /login` to authenticate."
+const ClaudeTokenMissingMessage = "claude token not found in Keychain — run `claude /login` to authenticate"
 
 var ErrClaudeTokenNotFound = errors.New(ClaudeTokenMissingMessage)
 
 func ReadClaudeToken(ctx context.Context) (string, error) {
-	return "", errors.New("Claude provider is macOS-only (Keychain access required)")
+	return "", errors.New("claude provider is macOS-only (Keychain access required)")
 }

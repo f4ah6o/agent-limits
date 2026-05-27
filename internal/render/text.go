@@ -10,8 +10,8 @@ import (
 )
 
 // textLabels holds the human-facing label and the display order for every
-// known limit key per provider. T2/T3/T4 must update this table when a
-// provider adds a new known limit key (see D15 in T1_scaffold_PLAN.md).
+// known limit key per provider. Update this table whenever a provider adds
+// a new known limit key (mirrors the provider package's own window list).
 var textLabels = map[string][]struct{ Key, Label string }{
 	"claude":  {{"five_hour", "5-hour"}, {"seven_day", "7-day"}, {"seven_day_sonnet", "7-day sonnet"}},
 	"codex":   {{"five_hour", "5-hour"}, {"seven_day", "7-day"}, {"code_review_seven_day", "Code review 7-day"}},

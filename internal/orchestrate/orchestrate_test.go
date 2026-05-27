@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/drogers0/llm-usage/internal/httpx"
 	"github.com/drogers0/llm-usage/internal/providers"
 )
 
 type stubProvider struct {
 	id      string
-	url     string
 	calls   atomic.Int32
 	results []stubResult // consumed in order; last entry repeats if exhausted
 	delay   time.Duration
@@ -25,8 +25,7 @@ type stubResult struct {
 	err error
 }
 
-func (s *stubProvider) ID() string  { return s.id }
-func (s *stubProvider) URL() string { return s.url }
+func (s *stubProvider) ID() string { return s.id }
 
 func (s *stubProvider) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 	idx := int(s.calls.Add(1)) - 1
@@ -130,13 +129,17 @@ func TestRun_AuthErrorIsNotRetried(t *testing.T) {
 }
 
 func TestRun_DebugWritesPerAttempt(t *testing.T) {
+	// Providers run concurrently; wrap the bytes.Buffer so per-provider
+	// debug lines don't interleave mid-write. (Real CLI does the same via
+	// realProviders wiring.)
 	var buf bytes.Buffer
-	p1 := &stubProvider{id: "claude", url: "https://example.test/claude", results: []stubResult{{out: mkOutput(2)}}}
-	p2 := &stubProvider{id: "codex", url: "https://example.test/codex", results: []stubResult{
+	safe := &httpx.ConcurrencySafeWriter{W: &buf}
+	p1 := &stubProvider{id: "claude", results: []stubResult{{out: mkOutput(2)}}}
+	p2 := &stubProvider{id: "codex", results: []stubResult{
 		{err: fmt.Errorf("%w: HTTP 503", providers.ErrTransient)},
 		{out: mkOutput(5)},
 	}}
-	Run(context.Background(), []string{"claude", "codex"}, []providers.Provider{p1, p2}, Options{Debug: &buf})
+	Run(context.Background(), []string{"claude", "codex"}, []providers.Provider{p1, p2}, Options{Debug: safe})
 	out := buf.String()
 	if !strings.Contains(out, "[debug] claude:") {
 		t.Errorf("debug missing claude line: %s", out)
@@ -146,9 +149,6 @@ func TestRun_DebugWritesPerAttempt(t *testing.T) {
 	}
 	if !strings.Contains(out, "[retry]") {
 		t.Errorf("retry line should be marked: %s", out)
-	}
-	if !strings.Contains(out, "https://example.test/claude") {
-		t.Errorf("URL should be present: %s", out)
 	}
 }
 

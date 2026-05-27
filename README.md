@@ -21,11 +21,15 @@ JSON is the default; `-h`/`--human` opts into the text rendering above.
 
 ## Install
 
+Prebuilt binaries are available on the [Releases page](https://github.com/drogers0/llm-usage/releases).
+
+For Go users, install from source:
+
 ```
 go install github.com/drogers0/llm-usage/cmd/usage-check@latest
 ```
 
-Requires Go 1.22+. macOS only (Claude credentials live in the macOS Keychain).
+Requires Go 1.22+. The Claude provider requires macOS (Keychain access); Codex and Copilot work on macOS and Linux.
 
 ## Usage
 
@@ -36,7 +40,8 @@ usage-check codex          # codex only, JSON
 usage-check copilot        # copilot only, JSON
 usage-check -h             # all services, human-readable text
 usage-check claude -h      # claude only, human-readable
-usage-check --debug        # per-provider URL, status, timing to stderr
+usage-check --debug        # one line per HTTP request + per-provider summary, to stderr
+usage-check --version      # print version and exit
 usage-check --help         # print help
 ```
 

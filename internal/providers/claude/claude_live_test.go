@@ -14,7 +14,7 @@ import (
 // api.anthropic.com. Opt-in: `go test -tags live ./internal/providers/claude`.
 // Confirms the live response still parses to >0 limits.
 func TestLive_RealKeychainAndEndpoint(t *testing.T) {
-	c := New()
+	c := New(nil)
 	out, err := c.Fetch(context.Background())
 	if err != nil {
 		if errors.Is(err, providers.ErrAuthMissing) {

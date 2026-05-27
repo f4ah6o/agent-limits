@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/drogers0/llm-usage/internal/cred"
+	"github.com/drogers0/llm-usage/internal/httpx"
 	"github.com/drogers0/llm-usage/internal/providers"
 )
 
@@ -34,7 +35,7 @@ func newTestClient(t *testing.T, body []byte, status int, captureReq *http.Reque
 	}))
 	t.Cleanup(srv.Close)
 	return &Client{
-		http:      srv.Client(),
+		doer:      &httpx.Doer{Client: srv.Client(), UserAgent: userAgent, ProviderID: "codex"},
 		endpoint:  srv.URL + "/backend-api/wham/usage",
 		readToken: func(ctx context.Context) (string, error) { return "fake-jwt", nil },
 	}
@@ -205,7 +206,7 @@ func TestFetch_NetworkErrorIsTransient(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	srv.Close()
 	c := &Client{
-		http:      srv.Client(),
+		doer:      &httpx.Doer{Client: srv.Client(), UserAgent: userAgent, ProviderID: "codex"},
 		endpoint:  srv.URL,
 		readToken: func(ctx context.Context) (string, error) { return "tok", nil },
 	}
@@ -221,7 +222,7 @@ func TestFetch_CancelledContextIsNotTransient(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := &Client{
-		http:      srv.Client(),
+		doer:      &httpx.Doer{Client: srv.Client(), UserAgent: userAgent, ProviderID: "codex"},
 		endpoint:  srv.URL,
 		readToken: func(ctx context.Context) (string, error) { return "tok", nil },
 	}

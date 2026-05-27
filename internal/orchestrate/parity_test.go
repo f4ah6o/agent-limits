@@ -11,11 +11,10 @@ import (
 	"github.com/drogers0/llm-usage/internal/render"
 )
 
-// TestParity_JSONContract is the regression target for docs/v2-design.md §
-// "JSON output". It locks the byte-stable shape: every Limit has the four
-// documented fields in the documented order, every provider key is present
-// for every requested provider, checked_at + resets_at use "+00:00" not "Z",
-// and providers are sorted alphabetically.
+// TestParity_JSONContract locks the byte-stable JSON shape: every Limit has
+// the four documented fields in the documented order, every provider key is
+// present for every requested provider, checked_at + resets_at use "+00:00"
+// not "Z", and providers are sorted alphabetically.
 func TestParity_JSONContract(t *testing.T) {
 	frozen := time.Date(2026, 5, 26, 20, 0, 0, 0, time.UTC)
 	mk := func(used float64, secs int) providers.Limit {
