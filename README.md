@@ -29,7 +29,7 @@ For Go users, install from source:
 go install github.com/drogers0/llm-usage/cmd/usage-check@latest
 ```
 
-Requires Go 1.22+. The Claude provider requires macOS (Keychain access); Codex and Copilot work on macOS and Linux.
+Requires Go 1.22+. Claude, Codex, and Copilot all work on macOS and Linux. The Claude provider reads from the macOS Keychain item populated by `claude /login`, or from `~/.claude/.credentials.json` on Linux.
 
 ## Usage
 
@@ -59,6 +59,18 @@ Each provider has one credential source and one HTTPS endpoint:
 
 Providers are fetched in parallel. A failing provider does not block the others; the binary exits 0 only when every requested provider succeeded, otherwise exit 2. Each failed provider's error message is surfaced in the JSON (`providers.<id>.error`) and as `<Cap> usage: <error>` in text mode.
 
+## Diagnostics on stderr
+
+Even without `--debug`, the Copilot provider may emit one diagnostic line to stderr when it detects an API drift signal:
+
+    usage-check: copilot: Copilot-product usageItems present but none matched
+    sku="Copilot Premium Request" — GitHub may have renamed the SKU; please
+    file an issue at https://github.com/drogers0/llm-usage/issues
+
+The exit code and stdout payload are unaffected — this is a heads-up that the underlying number may be stale. With `--debug`, additional per-request and per-provider lines are also written to stderr.
+
+On Linux, if `~/.claude/.credentials.json` is world- or group-readable, one warning line is also written to stderr; the read proceeds.
+
 ## Authentication
 
 If a provider's credential is missing, the error message names the exact command to fix it. For Copilot, the `user` scope is required:
@@ -66,6 +78,8 @@ If a provider's credential is missing, the error message names the exact command
 ```
 gh auth refresh -h github.com -s user
 ```
+
+If GitHub returns a Copilot plan slug `usage-check` doesn't recognize, the provider fails closed with a message naming the slug and a link to file an issue.
 
 ## Output contract
 
