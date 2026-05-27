@@ -72,6 +72,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 		args = args[1:]
 	}
 
+	if err := validateFlagGrammar(args); err != nil {
+		fmt.Fprintln(stderr, err.Error())
+		return 2
+	}
+
 	fs := flag.NewFlagSet("usage-check", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.Usage = func() {} // silence default Usage; we print our own help on --help.
@@ -134,4 +139,29 @@ func selectedProviders(service string) []string {
 		return append([]string(nil), providers.KnownProviderIDs...)
 	}
 	return []string{service}
+}
+
+// validateFlagGrammar rejects single-dash long-form flags so the binary's
+// accepted grammar matches the documented one. Go's flag package accepts
+// both -flag and --flag for long names; we publish --flag only. The
+// single-dash short form -h (length 2) is permitted. The standard
+// end-of-options marker "--" stops the scan so future positionals after
+// flags are unaffected.
+//
+// Known limitation: this is a syntactic pre-pass with no knowledge of
+// which flags take values. Any string-valued flag added in the future
+// MUST be invoked with --name=value syntax, not --name value, or the
+// value will look like a single-dash positional and trip this guard.
+// Today only the fake-build --fake-fail flag is string-valued, and the
+// in-tree tests already use the =value form.
+func validateFlagGrammar(args []string) error {
+	for _, a := range args {
+		if a == "--" {
+			break
+		}
+		if len(a) > 2 && a[0] == '-' && a[1] != '-' {
+			return fmt.Errorf("unrecognized flag: %s (use --%s)", a, strings.TrimLeft(a, "-"))
+		}
+	}
+	return nil
 }

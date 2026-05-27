@@ -108,10 +108,20 @@ func (r Report) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// ProviderResult is one provider's contribution to the Report. Exactly one of
-// Limits / Error is populated in practice; both use omitempty so a
-// successful provider serializes without an "error" key and a failed one
-// without an empty "limits" key.
+// ProviderResult is one provider's contribution to the Report.
+//
+// Error is set if and only if Fetch returned non-nil. On success, Limits
+// may be empty: a provider responded but returned no recognized window
+// (e.g. an upstream schema change renamed every known window key). Scripted
+// callers should treat "absent error + empty limits" as "provider responded
+// with nothing to show," distinct from a failure.
+//
+// Invariant for provider implementations: do NOT set Limits to a non-nil
+// empty map after parsing. Always nil it out when the parsed window set
+// is empty so the omitempty tag suppresses the "limits": {} key uniformly.
+//
+// Both fields use omitempty so a successful provider serializes without an
+// "error" key and a failed one without an empty "limits" key.
 type ProviderResult struct {
 	Limits map[string]Limit `json:"limits,omitempty"`
 	Error  string           `json:"error,omitempty"`

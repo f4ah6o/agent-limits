@@ -77,6 +77,12 @@ func Run(ctx context.Context, requested []string, all []providers.Provider, opts
 	return providers.Report{CheckedAt: checkedAt, Providers: results}, status
 }
 
+// fetchWithRetry retries once on ErrTransient. Before broadening this
+// policy (e.g. retry on additional classifications, scheduled backoff),
+// see the doc on httpx.DefaultClassify — GitHub 403 rate-limits today
+// misclassify as ErrAuthDenied and would need the Classifier signature
+// widened to *http.Response so X-RateLimit-* / Retry-After can inform
+// the decision.
 func fetchWithRetry(ctx context.Context, p providers.Provider, debug io.Writer) (providers.ProviderOutput, error) {
 	out, err := fetchOnce(ctx, p, debug, false)
 	if errors.Is(err, providers.ErrTransient) {

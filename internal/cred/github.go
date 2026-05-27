@@ -22,6 +22,13 @@ func ReadGitHubToken(ctx context.Context) (string, error) {
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
+		// Preserve context errors so callers can distinguish cancellation
+		// from missing auth — matches httpx.GetJSON's cancellation
+		// semantics. Without this, a Ctrl-C or provider timeout that kills
+		// the subprocess would be reported as "github token unavailable".
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", ctxErr
+		}
 		var ee *exec.ExitError
 		var pe *exec.Error
 		switch {

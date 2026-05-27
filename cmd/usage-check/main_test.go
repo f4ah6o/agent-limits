@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -270,5 +271,27 @@ func TestHelp_ListsAllKnownProviders(t *testing.T) {
 		if !strings.Contains(r.stdout, id) {
 			t.Errorf("help missing provider %q: %s", id, r.stdout)
 		}
+	}
+}
+
+// TestRun_RejectsSingleDashLongFlag verifies the pre-Parse grammar guard:
+// Go's flag package accepts both -flag and --flag for long names, but we
+// publish --flag only. Each rejected flag must exit 2 with a message
+// pointing at the correct spelling.
+func TestRun_RejectsSingleDashLongFlag(t *testing.T) {
+	// Includes -xyz (not a known flag spelling) to pin that the guard
+	// rejects ANY single-dash long form, not just the four published names.
+	cases := []string{"-help", "-version", "-debug", "-human", "-xyz"}
+	for _, flag := range cases {
+		t.Run(flag, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			code := run([]string{flag}, &stdout, &stderr)
+			if code != 2 {
+				t.Errorf("exit code = %d, want 2", code)
+			}
+			if !strings.Contains(stderr.String(), "unrecognized flag: "+flag) {
+				t.Errorf("stderr missing 'unrecognized flag: %s', got: %q", flag, stderr.String())
+			}
+		})
 	}
 }

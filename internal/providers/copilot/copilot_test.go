@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -49,7 +50,7 @@ func newRoutedClient(t *testing.T, userFixture, usageFixture []byte, userStatus,
 	c.readToken = func(ctx context.Context) (string, error) { return "gho_fake", nil }
 	c.userURL = srv.URL + "/user"
 	c.usageURL = func(login string, year int, month int) string {
-		return srv.URL + "/users/" + login + "/settings/billing/premium_request/usage"
+		return fmt.Sprintf("%s/users/%s/settings/billing/premium_request/usage?year=%d&month=%d", srv.URL, login, year, month)
 	}
 	return c, rec
 }
@@ -465,7 +466,8 @@ func TestFetch_TokenMissingIsAuthMissing(t *testing.T) {
 }
 
 func TestFetch_RequestShape(t *testing.T) {
-	c, rec := newRoutedClient(t, loadFixture(t, "user.json"), loadFixture(t, "usage.json"), 200, 200)
+	fixed := time.Date(2024, time.March, 15, 0, 0, 0, 0, time.UTC)
+	c, rec := newRoutedClient(t, loadFixture(t, "user.json"), loadFixture(t, "usage.json"), 200, 200, WithNow(func() time.Time { return fixed }))
 	_, err := c.Fetch(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -492,6 +494,12 @@ func TestFetch_RequestShape(t *testing.T) {
 	}
 	if !strings.HasPrefix(rec.reqs[1].URL.Path, "/users/REDACTED/") {
 		t.Errorf("second call path = %s", rec.reqs[1].URL.Path)
+	}
+	if got := rec.reqs[1].URL.Query().Get("year"); got != "2024" {
+		t.Errorf("second call year query = %q, want 2024", got)
+	}
+	if got := rec.reqs[1].URL.Query().Get("month"); got != "3" {
+		t.Errorf("second call month query = %q, want 3", got)
 	}
 }
 

@@ -49,7 +49,7 @@ func WithNow(fn func() time.Time) Option { return func(c *Client) { c.now = fn }
 func New(debug io.Writer, userAgent string, opts ...Option) *Client {
 	c := &Client{
 		doer: &httpx.Doer{
-			Client:       &http.Client{}, // ctx-scoped deadline in Fetch replaces a per-client Timeout.
+			Client:       &http.Client{}, // ctx-scoped deadline in Fetch replaces a per-client Timeout. Redirect policy: see httpx.Doer doc.
 			UserAgent:    userAgent,
 			ProviderID:   "claude",
 			ExtraHeaders: map[string]string{"Anthropic-Beta": betaHeader},
@@ -117,8 +117,8 @@ func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 		}
 	}
 	if len(limits) == 0 {
-		// Nil out so ProviderResult.Limits is omitempty-suppressed (the
-		// map field's omitempty hides nil but not an empty-non-nil map).
+		// Empty limits is a valid successful state (see ProviderResult doc) —
+		// set to nil so map-omitempty suppresses the "limits": {} key.
 		limits = nil
 	}
 	return providers.ProviderOutput{Limits: limits}, nil

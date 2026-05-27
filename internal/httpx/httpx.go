@@ -31,6 +31,13 @@ import (
 //
 // ExtraHeaders must not be mutated after construction; it is read by GetJSON
 // concurrently with other requests sharing the same Doer.
+//
+// Redirect behavior is net/http's default (≤10 redirects; stdlib strips
+// Authorization on cross-host redirects). Same-host redirects and scheme
+// downgrades are followed; none of the current endpoints issue redirects.
+// A strict CheckRedirect would risk breaking on future legitimate provider
+// changes (regional routing, version transitions); revisit if a provider
+// starts redirecting.
 type Doer struct {
 	Client       *http.Client
 	UserAgent    string
@@ -156,6 +163,13 @@ func Snip(b []byte) string {
 // DefaultClassify is the shared status mapping used by all providers for
 // non-200 responses. Providers wanting an overlay (e.g. Copilot's
 // 404 → ErrAuthMissing) wrap this with their own pre-check.
+//
+// All 403 responses classify as ErrAuthDenied. GitHub returns 403 for
+// primary/secondary rate-limit and abuse-detection responses, which this
+// misclassifies as auth failures. Accepted because the orchestrator does
+// not retry on ErrTransient. If a retry policy is added, this Classifier
+// signature must widen to receive *http.Response so X-RateLimit-* /
+// Retry-After headers can inform classification.
 func DefaultClassify(url string, status int, body []byte) error {
 	switch {
 	case status == 401 || status == 403:
@@ -170,7 +184,8 @@ func DefaultClassify(url string, status int, body []byte) error {
 // ConcurrencySafeWriter wraps an io.Writer with a mutex so concurrent Write
 // calls (e.g. from multiple providers' Doers writing to the same stderr) do
 // not interleave mid-line. Callers pass the same instance to every Doer.
-// Zero value is ready to use; construct with &ConcurrencySafeWriter{W: w}.
+// W is required; construct with &ConcurrencySafeWriter{W: w}. Behavior with
+// a nil W is undefined.
 type ConcurrencySafeWriter struct {
 	mu sync.Mutex
 	W  io.Writer

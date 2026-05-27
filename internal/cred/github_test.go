@@ -5,32 +5,56 @@ import (
 	"errors"
 	"os/exec"
 	"testing"
+	"time"
 )
 
-// TestReadGitHubToken_ContextCancelledStillWrapsSentinel verifies the fallback
-// branch in ReadGitHubToken: when cmd.Output() returns an error that is neither
-// *exec.ExitError nor *exec.Error (e.g., context.Canceled from a pre-cancelled
-// ctx), the error must still wrap ErrGitHubTokenNotFound so upstream callers
-// classify it as ErrAuthMissing.
+// TestReadGitHubToken_ContextCancelledReturnsCtxErr verifies the new
+// ctx.Err() check at the top of the error path: a pre-cancelled ctx
+// returns context.Canceled directly — NOT wrapped in
+// ErrGitHubTokenNotFound — matching httpx.GetJSON's cancellation
+// semantics.
 //
 // Requires `gh` on PATH; skips otherwise.
-//
-// Behavior note (Go 1.22): exec.CommandContext with a pre-cancelled ctx
-// returns context.Canceled from cmd.Start(), which is neither *exec.ExitError
-// nor *exec.Error — exercising the fallback branch as intended. If a future
-// Go version reclassifies this error, the test will fail on the wrong branch;
-// treat it as a tripwire.
-func TestReadGitHubToken_ContextCancelledStillWrapsSentinel(t *testing.T) {
+func TestReadGitHubToken_ContextCancelledReturnsCtxErr(t *testing.T) {
 	if _, err := exec.LookPath("gh"); err != nil {
 		t.Skip("gh not on PATH; skipping")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err := ReadGitHubToken(ctx)
-	if err == nil {
-		t.Fatal("expected error from pre-cancelled ctx")
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("expected context.Canceled, got: %v", err)
 	}
-	if !errors.Is(err, ErrGitHubTokenNotFound) {
-		t.Errorf("error should wrap ErrGitHubTokenNotFound, got: %v", err)
+	if errors.Is(err, ErrGitHubTokenNotFound) {
+		t.Errorf("cancelled ctx must not wrap ErrGitHubTokenNotFound: %v", err)
+	}
+}
+
+// TestReadGitHubToken_DeadlineKillsCommand supplements the pre-cancelled
+// case by exercising the killed-mid-execution branch (cmd.Output()
+// returns *exec.ExitError("signal: killed") with ctx.Err() non-nil).
+// The new ctx.Err() check intercepts both cmd.Output() error types
+// identically; on very fast machines this test may skip rather than
+// exercise the path, which is acceptable — the pre-cancelled test above
+// reliably verifies the fix's mechanism.
+func TestReadGitHubToken_DeadlineKillsCommand(t *testing.T) {
+	if _, err := exec.LookPath("gh"); err != nil {
+		t.Skip("gh not on PATH; skipping")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err := ReadGitHubToken(ctx)
+	// Skip both when gh completed cleanly AND when gh errored for a
+	// non-deadline reason (e.g. unconfigured auth on a CI host). The
+	// killed-process branch we want to exercise requires ctx.Err() to be
+	// non-nil after the call returns.
+	if err == nil || ctx.Err() == nil {
+		t.Skip("deadline not exercised; gh returned before timeout or finished without context expiry")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("expected context.DeadlineExceeded, got: %v", err)
+	}
+	if errors.Is(err, ErrGitHubTokenNotFound) {
+		t.Errorf("deadline-killed cmd must not wrap ErrGitHubTokenNotFound: %v", err)
 	}
 }

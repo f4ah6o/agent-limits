@@ -72,7 +72,7 @@ func WithNow(fn func() time.Time) Option { return func(c *Client) { c.now = fn }
 func New(debug io.Writer, userAgent string, opts ...Option) *Client {
 	c := &Client{
 		doer: &httpx.Doer{
-			Client:       &http.Client{}, // ctx-scoped deadline replaces a per-client Timeout.
+			Client:       &http.Client{}, // ctx-scoped deadline replaces a per-client Timeout. Redirect policy: see httpx.Doer doc.
 			UserAgent:    userAgent,
 			ProviderID:   "copilot",
 			ExtraHeaders: map[string]string{"Accept": acceptHeader},
