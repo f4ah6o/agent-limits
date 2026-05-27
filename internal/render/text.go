@@ -59,6 +59,9 @@ func Text(w io.Writer, r providers.Report, requested []string) error {
 		}
 		sections = append(sections, strings.Join(lines, "\n"))
 	}
+	if len(sections) == 0 {
+		return nil
+	}
 	if _, err := io.WriteString(w, strings.Join(sections, "\n\n")+"\n"); err != nil {
 		return err
 	}

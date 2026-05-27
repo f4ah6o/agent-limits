@@ -63,6 +63,16 @@ func TestText_SingleProvider(t *testing.T) {
 	}
 }
 
+func TestText_RequestedButNoneInReport(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Text(&buf, providers.Report{}, []string{"claude"}); err != nil {
+		t.Fatal(err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected empty output when no requested providers are in report, got %q", buf.String())
+	}
+}
+
 func TestText_EmptyRequested(t *testing.T) {
 	var buf bytes.Buffer
 	_ = Text(&buf, providers.Report{}, nil)
