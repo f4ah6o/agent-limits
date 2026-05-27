@@ -33,7 +33,7 @@ func resolvedVersion() string {
 }
 
 func userAgent() string {
-	return fmt.Sprintf("usage-check/%s (+https://github.com/drogers0/llm-usage)", resolvedVersion())
+	return fmt.Sprintf("usage-check/%s (+%s)", resolvedVersion(), providers.ProjectURL)
 }
 
 var knownServices = func() map[string]bool {
