@@ -38,7 +38,7 @@ type Client struct {
 func New(debug io.Writer, userAgent string) *Client {
 	return &Client{
 		doer: &httpx.Doer{
-			Client:     &http.Client{Timeout: timeout},
+			Client:     &http.Client{}, // ctx-scoped deadline in Fetch replaces a per-client Timeout.
 			UserAgent:  userAgent,
 			ProviderID: "codex",
 			Debug:      debug,
@@ -66,6 +66,9 @@ type response struct {
 }
 
 func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	token, err := c.readToken(ctx)
 	if err != nil {
 		if errors.Is(err, cred.ErrCodexTokenNotFound) {

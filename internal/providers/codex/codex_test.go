@@ -71,6 +71,35 @@ func TestFetch_GoldenFixture_TwoWindows(t *testing.T) {
 	}
 }
 
+// TestFetch_EmittedKeysMatchKnownWindows is a tripwire: if Fetch adds or
+// removes a window key, KnownWindows must stay in sync. The render-side
+// label table is policed separately by internal/render/tripwire_test.go.
+func TestFetch_EmittedKeysMatchKnownWindows(t *testing.T) {
+	c := newTestClient(t, loadFixture(t, "usage_with_code_review.json"), 200, nil)
+	out, err := c.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	emitted := map[string]bool{}
+	for k := range out.Limits {
+		emitted[k] = true
+	}
+	known := map[string]bool{}
+	for _, k := range KnownWindows {
+		known[k] = true
+	}
+	for k := range emitted {
+		if !known[k] {
+			t.Errorf("Fetch emitted %q but it is not in KnownWindows", k)
+		}
+	}
+	for k := range known {
+		if !emitted[k] {
+			t.Errorf("KnownWindows lists %q but Fetch did not emit it (fixture has all three)", k)
+		}
+	}
+}
+
 func TestFetch_CodeReviewIncluded(t *testing.T) {
 	c := newTestClient(t, loadFixture(t, "usage_with_code_review.json"), 200, nil)
 	out, err := c.Fetch(context.Background())
