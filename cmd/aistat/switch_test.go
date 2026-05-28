@@ -53,7 +53,7 @@ func withSwitchActiveUUID(t *testing.T, uuid string) {
 func withFetchLiveUsageFn(t *testing.T, fn func(token string) (map[string]providers.Limit, error)) {
 	t.Helper()
 	old := fetchLiveUsage
-	fetchLiveUsage = func(_ context.Context, token, _ string, _ io.Writer) (map[string]providers.Limit, error) {
+	fetchLiveUsage = func(_ context.Context, token, _, _ string, _ io.Writer) (map[string]providers.Limit, error) {
 		return fn(token)
 	}
 	t.Cleanup(func() { fetchLiveUsage = old })

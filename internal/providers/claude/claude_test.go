@@ -1456,9 +1456,12 @@ func TestFetch_CacheMissRepeatedRetryAfterExceedsBudget(t *testing.T) {
 	}
 }
 
-// TestFetchForSwitch_BypassesCache: pre-populate cache; FetchForSwitch still
-// hits the usage server for every non-active account (no cache).
-func TestFetchForSwitch_BypassesCache(t *testing.T) {
+// TestFetchForSwitch_UsesCacheHit: pre-populate cache for a non-active
+// account; FetchForSwitch reads from the cache, not the live endpoint. This
+// pins the unified-code-path contract (D7, revised): switch and reporting
+// share fetchLimitsCached so a recent aistat usage call's entries are
+// reused here.
+func TestFetchForSwitch_UsesCacheHit(t *testing.T) {
 	activeAcct := makeAccount("uuid-active", "active@example.com", "tok-active", "ref-active", 0)
 	otherAcct := makeAccount("uuid-other", "other@example.com", "tok-other", "ref-other", 0)
 	store := accounts.NewMemoryStore()
@@ -1485,14 +1488,18 @@ func TestFetchForSwitch_BypassesCache(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("FetchForSwitch returned %d results, want 1", len(results))
 	}
-	if n := usageCount.Load(); n != 1 {
-		t.Errorf("usage server requests = %d, want 1 (FetchForSwitch bypasses cache)", n)
+	if n := usageCount.Load(); n != 0 {
+		t.Errorf("usage server requests = %d, want 0 (FetchForSwitch should serve from cache)", n)
+	}
+	if got := results[0].Limits["five_hour"].UsedPercent; got != 10 {
+		t.Errorf("five_hour.UsedPercent = %v, want 10 (from cached entry)", got)
 	}
 }
 
-// TestFetchUsage_BypassesCache: pre-populate cache; FetchUsage still hits
-// the usage server (no cache).
-func TestFetchUsage_BypassesCache(t *testing.T) {
+// TestFetchUsage_UsesCacheHit: pre-populate cache for a UUID; FetchUsage with
+// that UUID reads from cache, not the live endpoint. Unified-code-path
+// contract for the switch active-account read.
+func TestFetchUsage_UsesCacheHit(t *testing.T) {
 	usageSrv, usageCount := stubCountingServer(t, 200, minUsageBody)
 	profileSrv := noProfileServer(t)
 	refreshSrv := noRefreshServer(t)
@@ -1504,12 +1511,34 @@ func TestFetchUsage_BypassesCache(t *testing.T) {
 		"five_hour": {UsedPercent: 5, RemainingPercent: 95, ResetsAt: testNow.Add(time.Hour)},
 	})
 
-	_, err := c.FetchUsage(context.Background(), "tok-test")
+	limits, err := c.FetchUsage(context.Background(), "tok-test", "uuid-x")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n := usageCount.Load(); n != 0 {
+		t.Errorf("usage server requests = %d, want 0 (FetchUsage should serve from cache)", n)
+	}
+	if got := limits["five_hour"].UsedPercent; got != 5 {
+		t.Errorf("five_hour.UsedPercent = %v, want 5 (from cached entry)", got)
+	}
+}
+
+// TestFetchUsage_EmptyUUIDBypassesCache: when uuid is empty (e.g. an unstored
+// live credential), FetchUsage falls through to a fresh fetch with no cache
+// interaction.
+func TestFetchUsage_EmptyUUIDBypassesCache(t *testing.T) {
+	usageSrv, usageCount := stubCountingServer(t, 200, minUsageBody)
+	profileSrv := noProfileServer(t)
+	refreshSrv := noRefreshServer(t)
+
+	c := buildClient(t, usageSrv, profileSrv, refreshSrv, nil, nil, nil, nil)
+
+	_, err := c.FetchUsage(context.Background(), "tok-test", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if n := usageCount.Load(); n != 1 {
-		t.Errorf("usage server requests = %d, want 1 (FetchUsage always fresh)", n)
+		t.Errorf("usage server requests = %d, want 1 (empty uuid forces fresh fetch)", n)
 	}
 }
 

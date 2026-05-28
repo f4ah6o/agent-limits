@@ -57,8 +57,12 @@ var (
 // realFetchLiveUsage fetches usage limits for the given access token via the
 // Claude provider's FetchUsage method. Called in auto-pick mode to read the
 // active account's current headroom for the D13 "already on best" comparison.
-func realFetchLiveUsage(ctx context.Context, token, ua string, debug io.Writer) (map[string]providers.Limit, error) {
-	return claude.New(debug, ua).FetchUsage(ctx, token)
+// The uuid is passed through so the call shares the same cached path used by
+// the reporting flow — a recent aistat usage call's cache entry for the active
+// account is reused here, sparing the live endpoint a request and surviving a
+// transient rate-limit on this account.
+func realFetchLiveUsage(ctx context.Context, token, uuid, ua string, debug io.Writer) (map[string]providers.Limit, error) {
+	return claude.New(debug, ua).FetchUsage(ctx, token, uuid)
 }
 
 // realSwitchLookupActiveUUID reads the live credential and resolves the
@@ -233,7 +237,7 @@ func runSwitch(args []string, stdout, stderr io.Writer, g globals) int {
 		// Compare best candidate with active account to check "already on best" (D13).
 		// fetchLiveUsage is read-only: no store mutation regardless of result.
 		if activeAcct := findAccountByUUID(stored, activeUUID); activeAcct != nil {
-			activeLimits, liveErr := fetchLiveUsage(ctx, activeAcct.AccessToken(), userAgent(), debugW)
+			activeLimits, liveErr := fetchLiveUsage(ctx, activeAcct.AccessToken(), activeAcct.UUID, userAgent(), debugW)
 			if liveErr == nil {
 				activeAR := providers.AccountResult{Limits: activeLimits}
 				var bestLastSeen time.Time

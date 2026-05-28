@@ -147,13 +147,19 @@ func (c *Client) readLiveCredential(ctx context.Context) (*cred.Credential, erro
 	return &cr, nil
 }
 
-// FetchUsage calls the usage endpoint with accessToken and returns the parsed
-// limits. No cache; always fresh. Exposed so cmd/aistat/switch can read the
+// FetchUsage calls the usage endpoint for a known account UUID and returns the
+// parsed limits. Goes through the same cached path as the reporting flow
+// (fetchLimitsCached): cache hit if a recent entry exists; otherwise fetches
+// fresh and writes through. Exposed so cmd/aistat/switch can read the
 // currently-active account's headroom for D13's "already on best" comparison
 // without re-implementing the window parser; FetchForSwitch returns only the
 // non-active rows.
-func (c *Client) FetchUsage(ctx context.Context, accessToken string) (map[string]providers.Limit, error) {
-	return c.fetchLimitsFresh(ctx, accessToken)
+//
+// Passing an empty uuid (e.g. for an unstored live credential) skips cache
+// entirely and falls through to a fresh fetch — the cache has no key to
+// associate the result with.
+func (c *Client) FetchUsage(ctx context.Context, accessToken, uuid string) (map[string]providers.Limit, error) {
+	return c.fetchLimitsCached(ctx, accessToken, uuid)
 }
 
 // fetchLimitsFresh calls the usage endpoint with accessToken and returns the
@@ -495,10 +501,15 @@ func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 }
 
 // FetchForSwitch is read-only against the live keychain and the multi-account
-// store. It performs no token refresh and no Upsert. No cache; always fresh —
-// auto-pick decisions need current headroom because a stale five_hour figure
-// can be wrong by a window reset. For each non-active stored account it calls
-// the usage endpoint with the stored access token verbatim.
+// store. It performs no token refresh and no Upsert. Each non-active stored
+// account's usage limits come from fetchLimitsCached — same code path as the
+// reporting flow — so a recent aistat usage call's cached entries are reused
+// here. This unifies the per-account read across reporting and switch decisions
+// and means a 429 during the reporting path (which the cache absorbs) does not
+// reappear during the very next switch invocation. Stale data up to the cache
+// TTL is accepted as a trade-off (D7, revised): the failure mode of "exclude a
+// rate-limited account from auto-pick" is strictly worse for the user than the
+// failure mode of "use a 30-second-old number near a window boundary."
 //
 // If the call returns ErrAuthDenied (the stored access token has typically
 // expired), the account is excluded from the returned slice and a per-account
@@ -544,7 +555,7 @@ func (c *Client) FetchForSwitch(ctx context.Context) ([]providers.AccountResult,
 
 	var results []providers.AccountResult
 	for _, acct := range nonActive {
-		limits, fetchErr := c.fetchLimitsFresh(poolCtx, acct.AccessToken())
+		limits, fetchErr := c.fetchLimitsCached(poolCtx, acct.AccessToken(), acct.UUID)
 		if fetchErr != nil {
 			if errors.Is(fetchErr, providers.ErrAuthDenied) {
 				c.warnf("aistat: claude: %s: stored credential rejected (run `aistat usage` to refresh); excluded from auto-pick\n", acct.Email)
