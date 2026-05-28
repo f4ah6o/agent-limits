@@ -81,21 +81,16 @@ func ReadClaudeToken(ctx context.Context) (string, error) {
 }
 
 // WriteClaudeLiveBlob overwrites the live "Claude Code-credentials" keychain
-// item with the given raw credential blob. It performs two security(1) steps:
-//
-//  1. add-generic-password -U updates the item value.
-//  2. set-generic-password-partition-list restores the "apple-tool:,apple:"
-//     partition list that the Claude CLI's own write uses, so subsequent reads
-//     from Apple-signed binaries (including the Claude CLI) do not prompt.
-//
-// Note: the set-generic-password-partition-list step prompts the user on every
-// invocation unless this binary is already in the keychain item's trusted-app
-// list. v2.1.0 ships this as the single committed ACL restoration path and does
-// NOT include a cgo SecKeychainItemModifyAttributesAndData fallback — cgo is
-// excluded to keep the binary statically linkable; see D15. A v2.1.1 follow-up
-// may add the cgo path if field observation shows prompting in practice.
-//
-// If step 1 errors, step 2 is not attempted and the error is returned.
+// item with the given raw credential blob via `security add-generic-password
+// -U`. The -U flag matches by (service, account) and updates the value in
+// place; per empirical observation on darwin, the item's existing per-binary
+// access-control list (which includes the Claude CLI's own binary identity,
+// added when `claude /login` first created the item) survives the update.
+// The Claude CLI's subsequent reads remain silent without any further ACL
+// manipulation, so we do NOT call `security set-generic-password-partition-
+// list` — that call would prompt the user for their keychain password on
+// every invocation as a macOS security requirement, even though the
+// resulting partition-list change is unnecessary in practice.
 func WriteClaudeLiveBlob(ctx context.Context, rawBlob []byte) error {
 	u := claudeUser()
 	if _, err := runSecurity(ctx, "add-generic-password",
@@ -108,17 +103,6 @@ func WriteClaudeLiveBlob(ctx context.Context, rawBlob []byte) error {
 			return fmt.Errorf("keychain write failed: %s", strings.TrimSpace(string(ee.Stderr)))
 		}
 		return fmt.Errorf("keychain write failed: %w", err)
-	}
-	if _, err := runSecurity(ctx, "set-generic-password-partition-list",
-		"-S", "apple-tool:,apple:", "-s", "Claude Code-credentials", "-a", u); err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
-		}
-		var ee *exec.ExitError
-		if errors.As(err, &ee) {
-			return fmt.Errorf("keychain partition-list update failed: %s", strings.TrimSpace(string(ee.Stderr)))
-		}
-		return fmt.Errorf("keychain partition-list update failed: %w", err)
 	}
 	return nil
 }

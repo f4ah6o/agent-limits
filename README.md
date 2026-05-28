@@ -84,7 +84,7 @@ After the switch, `aistat` reconciles the multi-account store so the now-active 
 
 `aistat switch` writes to the Claude CLI's own keychain item only under an explicit user action; the regular `aistat usage` path is observation-only and never mutates the live keychain.
 
-On macOS, after each `add-generic-password -U` write `aistat` follows up with `security set-generic-password-partition-list -S "apple-tool:,apple:"` so the Claude CLI's next read does not prompt. The first time `aistat` widens the partition list on a fresh keychain item macOS shows a one-time "Always Allow" prompt; subsequent runs do not. **If you observe a system prompt on the *Claude CLI's* next credential read after `aistat switch`, please file an issue** — that's the trigger for a v2.1.1 CGO fallback.
+On macOS, `aistat switch` updates the live keychain item via a single `security add-generic-password -U` call. The `-U` flag updates the value in place; the per-binary access-control list that `claude /login` originally placed on the item — which grants the Claude CLI silent-read access — survives the update, so subsequent Claude CLI reads do not prompt. We do not also call `security set-generic-password-partition-list`: that call would interrupt every switch with a keychain-password prompt as a macOS security requirement, while making no observable difference to the Claude CLI's access. If you ever do observe a system prompt from the Claude CLI itself reading the credential after `aistat switch`, please file an issue.
 
 Multi-account storage aggregates several Claude credentials in one place. `aistat accounts list` flags any account with `last_seen_at > 30 days` as `(stale)` so you can prune it with `aistat accounts remove`.
 

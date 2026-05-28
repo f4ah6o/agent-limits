@@ -8,15 +8,21 @@ import (
 	"os"
 	"os/exec"
 	"slices"
-	"strings"
 	"testing"
 )
 
 // TestWriteClaudeLiveBlob_SeamArgs verifies that WriteClaudeLiveBlob invokes
-// the security(1) tool with the exact arguments required by D15:
+// the security(1) tool with the exact arguments for a single update:
 //
-//  1. add-generic-password -U -s "Claude Code-credentials" -a <user> -w <blob>
-//  2. set-generic-password-partition-list -S "apple-tool:,apple:" -s "Claude Code-credentials" -a <user>
+//	add-generic-password -U -s "Claude Code-credentials" -a <user> -w <blob>
+//
+// The earlier two-step (add + set-generic-password-partition-list) was
+// dropped after empirical observation showed the partition-list call
+// (a) prompts the user for their keychain password every invocation and
+// (b) is unnecessary — the per-binary ACL entry that `claude /login`
+// originally placed on the item survives `-U` updates, so the Claude CLI's
+// reads remain silent without any further ACL manipulation. See the
+// WriteClaudeLiveBlob doc comment.
 //
 // The runSecurity seam is replaced for the duration of this test so no real
 // keychain access occurs. This test always runs (no AISTAT_LIVE_KEYCHAIN guard).
@@ -38,37 +44,24 @@ func TestWriteClaudeLiveBlob_SeamArgs(t *testing.T) {
 		t.Fatalf("WriteClaudeLiveBlob: %v", err)
 	}
 
-	if len(calls) != 2 {
-		t.Fatalf("expected 2 security calls, got %d", len(calls))
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 security call, got %d", len(calls))
 	}
 
-	// Step 1: add-generic-password
-	want1 := []string{
+	want := []string{
 		"add-generic-password", "-U",
 		"-s", "Claude Code-credentials",
 		"-a", u,
 		"-w", string(blob),
 	}
-	if !slices.Equal(calls[0].args, want1) {
-		t.Errorf("call[0] args:\ngot:  %v\nwant: %v", calls[0].args, want1)
-	}
-
-	// Step 2: set-generic-password-partition-list
-	want2 := []string{
-		"set-generic-password-partition-list",
-		"-S", "apple-tool:,apple:",
-		"-s", "Claude Code-credentials",
-		"-a", u,
-	}
-	if !slices.Equal(calls[1].args, want2) {
-		t.Errorf("call[1] args:\ngot:  %v\nwant: %v", calls[1].args, want2)
+	if !slices.Equal(calls[0].args, want) {
+		t.Errorf("call[0] args:\ngot:  %v\nwant: %v", calls[0].args, want)
 	}
 }
 
-// TestWriteClaudeLiveBlob_SeamStep2NotCalledOnStep1Error verifies that if
-// add-generic-password fails, set-generic-password-partition-list is not
-// attempted and the error is propagated.
-func TestWriteClaudeLiveBlob_SeamStep2NotCalledOnStep1Error(t *testing.T) {
+// TestWriteClaudeLiveBlob_SeamErrorPropagated verifies that an error from the
+// security call surfaces with the documented wrap.
+func TestWriteClaudeLiveBlob_SeamErrorPropagated(t *testing.T) {
 	blob := []byte(`{"claudeAiOauth":{"accessToken":"tok"}}`)
 
 	var calls int
@@ -84,10 +77,10 @@ func TestWriteClaudeLiveBlob_SeamStep2NotCalledOnStep1Error(t *testing.T) {
 
 	err := WriteClaudeLiveBlob(context.Background(), blob)
 	if err == nil {
-		t.Fatal("expected error when step 1 fails")
+		t.Fatal("expected error")
 	}
 	if calls != 1 {
-		t.Errorf("expected exactly 1 security call (step 1 only), got %d", calls)
+		t.Errorf("expected exactly 1 security call, got %d", calls)
 	}
 }
 
@@ -198,37 +191,3 @@ func TestWriteClaudeLiveBlob_LiveKeychain(t *testing.T) {
 	}
 }
 
-func TestWriteClaudeLiveBlob_LiveKeychain_PartitionList(t *testing.T) {
-	if os.Getenv("AISTAT_LIVE_KEYCHAIN") != "1" {
-		t.Skip("skipping live keychain test (set AISTAT_LIVE_KEYCHAIN=1 to enable)")
-	}
-
-	ctx := context.Background()
-	orig, backupErr := ReadClaudeCredential(ctx)
-	t.Cleanup(func() {
-		if backupErr == nil {
-			if err := WriteClaudeLiveBlob(context.Background(), orig.Raw); err != nil {
-				t.Logf("warning: failed to restore keychain credential: %v", err)
-			}
-		}
-	})
-
-	sentinel := []byte(`{"claudeAiOauth":{"accessToken":"aistat-partition-test","refreshToken":"","expiresAt":0}}`)
-	if err := WriteClaudeLiveBlob(ctx, sentinel); err != nil {
-		t.Fatalf("WriteClaudeLiveBlob: %v", err)
-	}
-
-	// Inspect the partition list via security find-generic-password -g.
-	out, err := exec.CommandContext(ctx, "security", "find-generic-password",
-		"-s", "Claude Code-credentials", "-g").CombinedOutput()
-	if err != nil {
-		t.Fatalf("security find-generic-password -g: %v\n%s", err, out)
-	}
-	outStr := string(out)
-	if !strings.Contains(outStr, "apple-tool:") {
-		t.Errorf("partition list does not contain apple-tool:; output:\n%s", outStr)
-	}
-	if !strings.Contains(outStr, "apple:") {
-		t.Errorf("partition list does not contain apple:; output:\n%s", outStr)
-	}
-}
