@@ -215,6 +215,22 @@ func sortAccountResults(results []providers.AccountResult) {
 }
 
 // refreshErrorMessage maps a refresh error to a user-facing per-account error string.
+// recordFetchOutcome populates ar with the result of a usage fetch and reports
+// whether the call succeeded and (when it didn't) whether the failure was
+// transient. The counter updates stay at the call site so the D8 retry rule
+// (`ErrTransient` iff zero succeeded AND at least one transient) is visible in
+// Fetch's body rather than buried in a helper. Used by Fetch's fallback-row and
+// per-stored-account branches; the refresh-failure branch sets ar.Error itself
+// via refreshErrorMessage and shares the same counter discipline.
+func recordFetchOutcome(ar *providers.AccountResult, limits map[string]providers.Limit, fetchErr error) (success, transient bool) {
+	if fetchErr != nil {
+		ar.Error = fetchErr.Error()
+		return false, errors.Is(fetchErr, providers.ErrTransient)
+	}
+	ar.Limits = limits
+	return true, false
+}
+
 func refreshErrorMessage(err error) string {
 	if errors.Is(err, ErrRefreshRejected) {
 		return "account credential expired (run `claude /login` to refresh)"
@@ -343,14 +359,10 @@ func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 			Plan:   "",
 			Active: true,
 		}
-		if fetchErr != nil {
-			ar.Error = fetchErr.Error()
-			if errors.Is(fetchErr, providers.ErrTransient) {
-				transientCount++
-			}
-		} else {
-			ar.Limits = limits
+		if ok, trans := recordFetchOutcome(&ar, limits, fetchErr); ok {
 			successCount++
+		} else if trans {
+			transientCount++
 		}
 		accountResults = append(accountResults, ar)
 	}
@@ -385,14 +397,10 @@ func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 		}
 
 		limits, fetchErr := c.fetchLimits(poolCtx, acct.AccessToken())
-		if fetchErr != nil {
-			ar.Error = fetchErr.Error()
-			if errors.Is(fetchErr, providers.ErrTransient) {
-				transientCount++
-			}
-		} else {
-			ar.Limits = limits
+		if ok, trans := recordFetchOutcome(&ar, limits, fetchErr); ok {
 			successCount++
+		} else if trans {
+			transientCount++
 		}
 		accountResults = append(accountResults, ar)
 	}
