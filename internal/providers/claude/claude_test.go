@@ -225,7 +225,7 @@ func TestFetch_ResetAfterSecondsTruncated(t *testing.T) {
 	}
 
 	want := int(resetsAt.Sub(frozen.Truncate(time.Second)).Seconds())
-	if got := out.Limits["five_hour"].ResetAfterSeconds; got != want {
+	if got := out.Accounts[0].Limits["five_hour"].ResetAfterSeconds; got != want {
 		t.Errorf("ResetAfterSeconds = %d, want %d", got, want)
 	}
 }
@@ -245,20 +245,26 @@ func TestFetch_GoldenFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Limits) != 3 {
-		t.Fatalf("expected 3 limits, got %d: %v", len(out.Limits), keys(out.Limits))
+	// Single-account success path — limits live on the per-account row;
+	// out.Limits is intentionally nil under the multi-account contract.
+	if len(out.Accounts) != 1 {
+		t.Fatalf("expected 1 account row, got %d", len(out.Accounts))
+	}
+	acctLimits := out.Accounts[0].Limits
+	if len(acctLimits) != 3 {
+		t.Fatalf("expected 3 limits, got %d: %v", len(acctLimits), keys(acctLimits))
 	}
 	for _, want := range []string{"five_hour", "seven_day", "seven_day_sonnet"} {
-		if _, ok := out.Limits[want]; !ok {
+		if _, ok := acctLimits[want]; !ok {
 			t.Errorf("missing %s", want)
 		}
 	}
 	for _, unwanted := range []string{"seven_day_omelette", "seven_day_opus", "tangelo", "iguana_necktie"} {
-		if _, ok := out.Limits[unwanted]; ok {
+		if _, ok := acctLimits[unwanted]; ok {
 			t.Errorf("bonus window %s should be filtered out", unwanted)
 		}
 	}
-	fh := out.Limits["five_hour"]
+	fh := acctLimits["five_hour"]
 	if fh.UsedPercent != 47.0 {
 		t.Errorf("five_hour used_percent = %v, want 47.0", fh.UsedPercent)
 	}
@@ -271,10 +277,6 @@ func TestFetch_GoldenFixture(t *testing.T) {
 	wantTime, _ := time.Parse(time.RFC3339, "2026-05-26T22:00:00Z")
 	if !fh.ResetsAt.Equal(wantTime) {
 		t.Errorf("resets_at = %v, want %v", fh.ResetsAt, wantTime)
-	}
-	// New: single-account fixture should have one row in Accounts.
-	if len(out.Accounts) != 1 {
-		t.Fatalf("expected 1 account row, got %d", len(out.Accounts))
 	}
 	if !out.Accounts[0].Active {
 		t.Error("single account row should be active")
@@ -292,7 +294,7 @@ func TestFetch_NullResetsAtIsSkipped(t *testing.T) {
 	refreshSrv := noRefreshServer(t)
 
 	out, _ := buildClient(t, usageSrv, profileSrv, refreshSrv, live, store, nil, nil).Fetch(context.Background())
-	if _, ok := out.Limits["seven_day_omelette"]; ok {
+	if _, ok := out.Accounts[0].Limits["seven_day_omelette"]; ok {
 		t.Error("seven_day_omelette should be excluded when resets_at is null")
 	}
 }
@@ -467,9 +469,10 @@ func TestFetch_TwoAccount_BothSucceed(t *testing.T) {
 	if out.Accounts[1].UUID != "uuid-b" {
 		t.Errorf("second account UUID = %q, want uuid-b", out.Accounts[1].UUID)
 	}
-	// Provider-level Limits = active account's limits.
-	if out.Limits == nil {
-		t.Error("provider-level Limits should be non-nil (active account succeeded)")
+	// Provider-level Limits is intentionally nil under the multi-account
+	// contract — accounts[i].limits is canonical.
+	if out.Limits != nil {
+		t.Errorf("provider-level Limits should be nil under multi-account contract; got %v", out.Limits)
 	}
 }
 
@@ -526,9 +529,9 @@ func TestFetch_StoredRefreshRejected(t *testing.T) {
 	if len(out.Accounts) != 2 {
 		t.Fatalf("Accounts len = %d, want 2", len(out.Accounts))
 	}
-	// Active account's limits must be projected to provider-level Limits.
-	if out.Limits == nil {
-		t.Error("provider-level Limits should be non-nil (acctA succeeded)")
+	// Provider-level Limits is intentionally nil — multi-account contract.
+	if out.Limits != nil {
+		t.Errorf("provider-level Limits should be nil; got %v", out.Limits)
 	}
 	// Find acctA and acctB in results and check their state.
 	var sawA, sawB bool

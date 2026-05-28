@@ -107,10 +107,14 @@ func (r Report) MarshalJSON() ([]byte, error) {
 // AccountResult is one stored Claude account's contribution to a ProviderResult.
 // Active is intentionally not omitempty — false is meaningful (the account is
 // stored but not currently live). Limits uses omitempty so a per-account fetch
-// error omits the key entirely rather than emitting null.
+// error omits the key entirely rather than emitting null. UUID is hidden from
+// JSON (json:"-") because email is the user-facing identifier for scripted
+// consumers; UUIDs surface in `aistat accounts list` text output and in
+// `aistat switch`'s confirmation line, both of which are the discovery
+// surfaces for UUID-prefix matching.
 type AccountResult struct {
 	Email  string           `json:"email"`
-	UUID   string           `json:"uuid"`
+	UUID   string           `json:"-"`
 	Plan   string           `json:"plan"`
 	Active bool             `json:"active"`
 	Limits map[string]Limit `json:"limits,omitempty"`
@@ -127,10 +131,10 @@ type AccountResult struct {
 //     success-with-windows → `"limits": {...}`, zero-windows → `"limits": {}`,
 //     failure → `"limits": null`. `{}` vs `null` lets callers distinguish
 //     "asked, got nothing" from "failed".
-//   - Accounts non-empty (Claude multi-account path): Limits is the
-//     active-account compatibility projection. When nil (active account fetch
-//     error), the key is omitted entirely — callers that care should read
-//     Accounts. When non-nil, Limits serializes normally.
+//   - Accounts non-empty (Claude multi-account path): the `limits` key is
+//     omitted entirely. The active account's limits live in
+//     `accounts[i].limits` where `active == true`; a top-level mirror would
+//     just duplicate that block.
 type ProviderResult struct {
 	Limits   map[string]Limit `json:"limits"`
 	Accounts []AccountResult  `json:"accounts,omitempty"`
@@ -138,17 +142,18 @@ type ProviderResult struct {
 }
 
 func (r ProviderResult) MarshalJSON() ([]byte, error) {
-	if len(r.Accounts) > 0 && r.Limits == nil {
-		// Multi-account path: active account had a fetch error; omit limits key.
+	if len(r.Accounts) > 0 {
+		// Multi-account path: `accounts` is canonical; omit the top-level
+		// limits mirror.
 		return json.Marshal(struct {
 			Accounts []AccountResult `json:"accounts"`
 			Error    string          `json:"error,omitempty"`
 		}{Accounts: r.Accounts, Error: r.Error})
 	}
-	// Legacy path (Codex/Copilot) or non-nil limits: always include limits.
+	// Legacy single-account path (Codex/Copilot, or Claude with no stored
+	// accounts and an immediate fetch error): always include limits.
 	return json.Marshal(struct {
-		Limits   map[string]Limit `json:"limits"`
-		Accounts []AccountResult  `json:"accounts,omitempty"`
-		Error    string           `json:"error,omitempty"`
-	}{Limits: r.Limits, Accounts: r.Accounts, Error: r.Error})
+		Limits map[string]Limit `json:"limits"`
+		Error  string           `json:"error,omitempty"`
+	}{Limits: r.Limits, Error: r.Error})
 }

@@ -405,21 +405,13 @@ func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 		accountResults = append(accountResults, ar)
 	}
 
-	// Step 8: active account's limits become the provider-level Limits
-	// (compatibility projection for Codex/Copilot-style consumers per D3).
-	var providerLimits map[string]providers.Limit
-	for _, ar := range accountResults {
-		if ar.Active && ar.Limits != nil {
-			providerLimits = ar.Limits
-			break
-		}
-	}
-
 	// Sort: active first, then by Email ASCII ascending (D3, deterministic).
+	// The provider-level Limits field is left nil — when Accounts is populated,
+	// ProviderResult.MarshalJSON omits the top-level "limits" key entirely, and
+	// the text renderer routes on len(Accounts) > 0 to its per-account view.
 	sortAccountResults(accountResults)
 
 	out := providers.ProviderOutput{
-		Limits:   providerLimits,
 		Accounts: accountResults,
 	}
 

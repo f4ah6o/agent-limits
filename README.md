@@ -151,10 +151,9 @@ If GitHub returns a Copilot plan slug `aistat` doesn't recognize, the provider f
   "checked_at": "2026-05-28T01:00:00+00:00",
   "providers": {
     "claude": {
-      "limits": { "five_hour": {"used_percent": 6, "remaining_percent": 94, "resets_at": "2026-05-28T06:00:00+00:00", "reset_after_seconds": 17280} },
       "accounts": [
-        { "email": "personal@example.com", "uuid": "aaaa...", "plan": "default_claude_max_5x", "active": true,  "limits": {...} },
-        { "email": "work@example.com",     "uuid": "bbbb...", "plan": "default_claude_max_20x", "active": false, "limits": {...} }
+        { "email": "personal@example.com", "plan": "default_claude_max_5x",  "active": true,  "limits": {...} },
+        { "email": "work@example.com",     "plan": "default_claude_max_20x", "active": false, "limits": {...} }
       ]
     },
     "codex":   { "limits": { ... } },
@@ -163,7 +162,9 @@ If GitHub returns a Copilot plan slug `aistat` doesn't recognize, the provider f
 }
 ```
 
-For Claude, `accounts` is the canonical multi-account view. The top-level `limits` field on the Claude provider mirrors the *active* account's limits — kept for backward compatibility with single-account JSON consumers. Codex and Copilot stay single-account: `accounts` is absent.
+For Claude, `accounts` is the **only** view — the per-account row whose `active: true` carries the live account's limits. There is no top-level `limits` mirror; scripts that care about "the active account's headroom" should filter `accounts` for `active: true` and read its `limits`. Codex and Copilot stay single-account: each emits a flat top-level `limits` and no `accounts`.
+
+`email` is the JSON identifier; UUIDs live in `~/.config/aistat/accounts/claude.json` (Linux) / the macOS keychain index, and surface in `aistat accounts list`'s text output and `aistat switch`'s confirmation line — that's where you read them when you want to use `accounts remove <uuid-prefix>` or `switch --to <uuid-prefix>`.
 
 Every `Limit` has the same four fields: `used_percent`, `remaining_percent`, `resets_at` (ISO 8601, always `+00:00` for UTC, never `Z`), `reset_after_seconds`. The top-level `providers` map is alphabetically sorted.
 
