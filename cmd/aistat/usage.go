@@ -35,13 +35,8 @@ func runUsage(args []string, stdout, stderr io.Writer, g globals) int {
 	}
 
 	// After --help/--version check (they may appear after "usage" token).
-	if g.Help {
-		fmt.Fprint(stdout, helpText)
-		return 0
-	}
-	if g.Version {
-		fmt.Fprintln(stdout, resolvedVersion())
-		return 0
+	if handled, code := handleGlobals(g, stdout); handled {
+		return code
 	}
 
 	// Extract the optional provider positional (first non-flag arg from first pass).
@@ -61,13 +56,8 @@ func runUsage(args []string, stdout, stderr io.Writer, g globals) int {
 	}
 
 	// After --help/--version that may appear after the provider.
-	if g.Help {
-		fmt.Fprint(stdout, helpText)
-		return 0
-	}
-	if g.Version {
-		fmt.Fprintln(stdout, resolvedVersion())
-		return 0
+	if handled, code := handleGlobals(g, stdout); handled {
+		return code
 	}
 
 	if fs.NArg() > 0 {

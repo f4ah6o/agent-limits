@@ -174,13 +174,8 @@ func runSwitch(args []string, stdout, stderr io.Writer, g globals) int {
 		fmt.Fprintln(stderr, err.Error())
 		return int(orchestrate.StatusUsageError)
 	}
-	if g.Help {
-		fmt.Fprint(stdout, helpText)
-		return 0
-	}
-	if g.Version {
-		fmt.Fprintln(stdout, resolvedVersion())
-		return 0
+	if handled, code := handleGlobals(g, stdout); handled {
+		return code
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

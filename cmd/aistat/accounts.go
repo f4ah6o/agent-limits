@@ -64,13 +64,8 @@ func runAccounts(
 		fmt.Fprintln(stderr, err.Error())
 		return int(orchestrate.StatusUsageError)
 	}
-	if g.Help {
-		fmt.Fprint(stdout, helpText)
-		return 0
-	}
-	if g.Version {
-		fmt.Fprintln(stdout, resolvedVersion())
-		return 0
+	if handled, code := handleGlobals(g, stdout); handled {
+		return code
 	}
 
 	remaining := fs.Args()
@@ -105,13 +100,8 @@ func runAccountsList(
 		fmt.Fprintln(stderr, err.Error())
 		return int(orchestrate.StatusUsageError)
 	}
-	if g.Help {
-		fmt.Fprint(stdout, helpText)
-		return 0
-	}
-	if g.Version {
-		fmt.Fprintln(stdout, resolvedVersion())
-		return 0
+	if handled, code := handleGlobals(*g, stdout); handled {
+		return code
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -152,13 +142,8 @@ func runAccountsRemove(
 		fmt.Fprintln(stderr, err.Error())
 		return int(orchestrate.StatusUsageError)
 	}
-	if g.Help {
-		fmt.Fprint(stdout, helpText)
-		return 0
-	}
-	if g.Version {
-		fmt.Fprintln(stdout, resolvedVersion())
-		return 0
+	if handled, code := handleGlobals(*g, stdout); handled {
+		return code
 	}
 
 	ids := rfs.Args()

@@ -105,6 +105,21 @@ func registerGlobalFlags(fs *flag.FlagSet, g *globals) {
 	fs.BoolVar(&g.Version, "version", g.Version, "")
 }
 
+// handleGlobals prints help/version on stdout if either flag is set and returns
+// (true, 0). Subcommand entry points call this after FlagSet parsing so
+// `aistat <sub> --help` and `aistat <sub> --version` both work uniformly.
+func handleGlobals(g globals, stdout io.Writer) (handled bool, code int) {
+	if g.Help {
+		fmt.Fprint(stdout, helpText)
+		return true, 0
+	}
+	if g.Version {
+		fmt.Fprintln(stdout, resolvedVersion())
+		return true, 0
+	}
+	return false, 0
+}
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
@@ -117,13 +132,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	// --help and --version short-circuit before subcommand dispatch.
-	if g.Help {
-		fmt.Fprint(stdout, helpText)
-		return 0
-	}
-	if g.Version {
-		fmt.Fprintln(stdout, resolvedVersion())
-		return 0
+	if handled, code := handleGlobals(g, stdout); handled {
+		return code
 	}
 
 	switch sub {
