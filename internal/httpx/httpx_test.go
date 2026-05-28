@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -523,6 +524,94 @@ func TestGetJSON_SchemeDowngradeRejected(t *testing.T) {
 	}
 	if downgradeHit {
 		t.Errorf("downgrade target must NOT have been reached")
+	}
+}
+
+func TestPostForm_HappyPath(t *testing.T) {
+	var gotMethod, gotContentType, gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotContentType = r.Header.Get("Content-Type")
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("ParseForm: %v", err)
+		}
+		gotBody = r.Form.Get("grant_type")
+		w.Write([]byte(`{"result":99}`))
+	}))
+	defer srv.Close()
+	d := newDoer(t, srv.Client())
+	var got struct{ Result int }
+	vals := url.Values{"grant_type": {"refresh_token"}}
+	if err := d.PostForm(context.Background(), srv.URL, vals, 10*time.Second, &got, DefaultClassify); err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != http.MethodPost {
+		t.Errorf("method = %q, want POST", gotMethod)
+	}
+	if gotContentType != "application/x-www-form-urlencoded" {
+		t.Errorf("Content-Type = %q, want application/x-www-form-urlencoded", gotContentType)
+	}
+	if gotBody != "refresh_token" {
+		t.Errorf("grant_type = %q, want refresh_token", gotBody)
+	}
+	if got.Result != 99 {
+		t.Errorf("result = %d, want 99", got.Result)
+	}
+}
+
+func TestPostForm_NoAuthorizationHeader(t *testing.T) {
+	var captured http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = r.Header.Clone()
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	d := newDoer(t, srv.Client())
+	var dst struct{}
+	if err := d.PostForm(context.Background(), srv.URL, url.Values{}, 10*time.Second, &dst, DefaultClassify); err != nil {
+		t.Fatal(err)
+	}
+	if got := captured.Get("Authorization"); got != "" {
+		t.Errorf("Authorization should be absent on PostForm, got %q", got)
+	}
+}
+
+func TestPostForm_UAAndAcceptStillSet(t *testing.T) {
+	var captured http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = r.Header.Clone()
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	d := newDoer(t, srv.Client())
+	var dst struct{}
+	if err := d.PostForm(context.Background(), srv.URL, url.Values{}, 10*time.Second, &dst, DefaultClassify); err != nil {
+		t.Fatal(err)
+	}
+	if got := captured.Get("User-Agent"); got != "aistat-test/0" {
+		t.Errorf("User-Agent = %q, want aistat-test/0", got)
+	}
+	if got := captured.Get("Accept"); got != "application/json" {
+		t.Errorf("Accept = %q, want application/json", got)
+	}
+}
+
+func TestPostForm_ExtraHeadersUserAgentReserved(t *testing.T) {
+	var captured http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = r.Header.Clone()
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	d := newDoerWithExtra(t, srv.Client(), map[string]string{
+		"User-Agent": "evil-ua",
+	})
+	var dst struct{}
+	if err := d.PostForm(context.Background(), srv.URL, url.Values{}, 10*time.Second, &dst, DefaultClassify); err != nil {
+		t.Fatal(err)
+	}
+	if got := captured.Get("User-Agent"); got != "aistat-test/0" {
+		t.Errorf("User-Agent should be Doer's value, got %q", got)
 	}
 }
 

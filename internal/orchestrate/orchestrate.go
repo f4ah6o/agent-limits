@@ -30,8 +30,21 @@ const (
 )
 
 // Run fetches every requested provider concurrently, retries each once on
-// transient failure, and assembles a Report. The ExitStatus is non-zero iff
-// any requested provider's final attempt failed.
+// transient failure, and assembles a Report.
+//
+// Exit-status rule (D8):
+//   - StatusOK (0): every requested provider produced a result without a
+//     provider-level error. Per-account errors inside Accounts — which surface
+//     in JSON — do not flip the exit code; the provider as a whole succeeded.
+//   - StatusAnyFailed (1): at least one provider's Fetch returned a non-nil
+//     error after any applicable retry. When Fetch returns an error alongside
+//     a non-empty ProviderOutput.Accounts, those rows are preserved in the
+//     result so callers see the partial information the provider gathered
+//     before deciding the overall fetch had failed.
+//
+// The Claude provider is responsible for returning ErrTransient iff zero
+// accounts succeeded AND at least one account failure was transient; the
+// orchestrator simply consumes that signal to trigger the single retry.
 func Run(ctx context.Context, requested []string, all []providers.Provider, opts Options) (providers.Report, ExitStatus) {
 	if opts.Now == nil {
 		opts.Now = time.Now
@@ -70,10 +83,16 @@ func Run(ctx context.Context, requested []string, all []providers.Provider, opts
 			defer mu.Unlock()
 			if err != nil {
 				anyFailed = true
-				results[p.ID()] = providers.ProviderResult{Error: err.Error()}
+				results[p.ID()] = providers.ProviderResult{
+					Accounts: out.Accounts, // preserve partial rows (D8)
+					Error:    err.Error(),
+				}
 				return
 			}
-			results[p.ID()] = providers.ProviderResult{Limits: out.Limits}
+			results[p.ID()] = providers.ProviderResult{
+				Limits:   out.Limits,
+				Accounts: out.Accounts, // slice-header copy; same type on both sides
+			}
 		}(p)
 	}
 	wg.Wait()

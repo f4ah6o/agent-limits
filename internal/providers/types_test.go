@@ -94,6 +94,71 @@ func TestReportMarshalJSON(t *testing.T) {
 	}
 }
 
+func TestProviderResultOmitempty_AccountsBranch(t *testing.T) {
+	at, _ := time.Parse(time.RFC3339, "2026-05-26T20:00:00Z")
+	accounts := []AccountResult{{Email: "a@example.com", UUID: "u1", Active: true}}
+	limits := map[string]Limit{"five_hour": {ResetsAt: at}}
+
+	// Accounts set, Limits nil → "limits" key must be absent.
+	b, _ := json.Marshal(ProviderResult{Accounts: accounts})
+	if strings.Contains(string(b), `"limits"`) {
+		t.Fatalf("expected no limits key when Accounts set and Limits nil; got %s", b)
+	}
+
+	// Both Limits and Accounts set → both keys present.
+	b, _ = json.Marshal(ProviderResult{Limits: limits, Accounts: accounts})
+	if !strings.Contains(string(b), `"limits"`) || !strings.Contains(string(b), `"accounts"`) {
+		t.Fatalf("expected both limits and accounts keys; got %s", b)
+	}
+
+	// Accounts nil, Limits set → limits present, accounts absent (legacy path).
+	b, _ = json.Marshal(ProviderResult{Limits: limits})
+	if !strings.Contains(string(b), `"limits"`) {
+		t.Fatalf("expected limits key on legacy path; got %s", b)
+	}
+	if strings.Contains(string(b), `"accounts"`) {
+		t.Fatalf("expected no accounts key on legacy path; got %s", b)
+	}
+
+	// Accounts set, Limits is non-nil empty map → both keys present.
+	// An empty map means "active account fetched, zero limit windows" (distinct
+	// from nil, which means "fetch error / omitted"). Both keys must appear.
+	b, _ = json.Marshal(ProviderResult{Accounts: accounts, Limits: map[string]Limit{}})
+	if !strings.Contains(string(b), `"limits"`) || !strings.Contains(string(b), `"accounts"`) {
+		t.Fatalf("expected both keys when Accounts set and Limits is empty map; got %s", b)
+	}
+}
+
+func TestAccountResult_ActiveFalseSerialized(t *testing.T) {
+	b, _ := json.Marshal(AccountResult{Active: false})
+	if !strings.Contains(string(b), `"active":false`) {
+		t.Fatalf("active:false must serialize (omitempty must NOT be on the bool); got %s", b)
+	}
+}
+
+func TestAccountResult_FieldOrder(t *testing.T) {
+	at, _ := time.Parse(time.RFC3339, "2026-05-26T20:00:00Z")
+	a := AccountResult{
+		Email:  "a@example.com",
+		UUID:   "u1",
+		Plan:   "Max 5x",
+		Active: true,
+		Limits: map[string]Limit{"x": {ResetsAt: at}},
+		Error:  "oops",
+	}
+	b, _ := json.Marshal(a)
+	s := string(b)
+	idxEmail := strings.Index(s, "email")
+	idxUUID := strings.Index(s, "uuid")
+	idxPlan := strings.Index(s, "plan")
+	idxActive := strings.Index(s, "active")
+	idxLimits := strings.Index(s, "limits")
+	idxError := strings.Index(s, "error")
+	if !(idxEmail < idxUUID && idxUUID < idxPlan && idxPlan < idxActive && idxActive < idxLimits && idxLimits < idxError) {
+		t.Fatalf("AccountResult field order wrong; got %s", s)
+	}
+}
+
 func TestProviderResult_LimitsAlwaysEmitted(t *testing.T) {
 	// Failure case: nil limits, error populated → "limits":null, error key
 	// present.

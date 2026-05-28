@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,17 +20,18 @@ import (
 )
 
 // Doer is a thin wrapper around *http.Client that provides the request/response
-// pipeline shared by every provider. Construct with NewDoer. Header application
-// order: Authorization and User-Agent are set first, then a default
-// `Accept: application/json`, then extraHeaders are applied last and override
-// remaining defaults. Authorization and User-Agent are reserved — entries in
-// extraHeaders for those keys (canonical or otherwise) are silently dropped so
-// a misconfigured provider cannot accidentally clobber the bearer token or
-// user-agent. Providers needing a non-JSON Accept (e.g. Copilot's
-// `application/vnd.github+json`) supply it via extraHeaders. A future endpoint
-// on the same Doer that needs a different Accept must use a per-request header
-// instead — this Doer cannot differentiate by URL. Acceptable today since each
-// provider has its own Doer.
+// pipeline shared by every provider. Construct with NewDoer.
+//
+// Header rules:
+//   - User-Agent is always set by Doer and cannot be overridden via extraHeaders
+//     (those entries are silently dropped by setCommonHeaders).
+//   - Authorization is NOT filtered by setCommonHeaders. GetJSON sets it after
+//     calling setCommonHeaders, so the bearer token always wins over any
+//     Authorization entry in extraHeaders. PostForm does not set Authorization
+//     at all; callers may supply it via extraHeaders if a POST endpoint requires
+//     it (the Claude refresh endpoint does not — it authenticates via the body).
+//   - All other extraHeaders are applied after User-Agent and Accept, so they
+//     can override Accept (e.g. Copilot's `application/vnd.github+json`).
 //
 // Redirect behavior: stdlib follows up to 10 redirects and strips Authorization
 // across host changes; RejectSchemeDowngrade (installed by every provider's
@@ -38,7 +41,7 @@ type Doer struct {
 	Client       *http.Client
 	UserAgent    string
 	ProviderID   string            // included in debug log prefix so concurrent provider lines are greppable
-	extraHeaders map[string]string // applied last, overrides defaults
+	extraHeaders map[string]string // applied last (User-Agent filtered; Authorization not filtered — see type comment)
 	Debug        io.Writer         // nil disables per-request logging; pass a *ConcurrencySafeWriter when sharing across providers
 }
 
@@ -86,35 +89,41 @@ func RejectSchemeDowngrade(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
-// GetJSON performs GET url with Bearer auth, runs classify on non-200, and
-// unmarshals a 200 body into dst. timeout is the per-call deadline derived
-// inside GetJSON from parentCtx — callers pass their parent ctx unchanged so
-// GetJSON can distinguish parent cancellation (bare context error) from a
-// child-only deadline (wrapped as ErrTransient so the orchestrator retries).
-func (d *Doer) GetJSON(parentCtx context.Context, url, token string, timeout time.Duration, dst any, classify Classifier) error {
-	ctx, cancel := context.WithTimeout(parentCtx, timeout)
-	defer cancel()
-	start := time.Now()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
+// setCommonHeaders sets User-Agent (from Doer) and Accept: application/json,
+// then applies extraHeaders, skipping only User-Agent (always Doer-controlled).
+// Authorization is not filtered, so an extraHeaders Authorization entry is
+// applied here. Callers that need Authorization to take a specific value must
+// set it after this call (GetJSON does this; PostForm does not, by design).
+func (d *Doer) setCommonHeaders(req *http.Request) {
 	req.Header.Set("User-Agent", d.UserAgent)
 	req.Header.Set("Accept", "application/json")
 	for k, v := range d.extraHeaders {
-		canon := http.CanonicalHeaderKey(k)
-		if canon == "Authorization" || canon == "User-Agent" {
+		if http.CanonicalHeaderKey(k) == "User-Agent" {
 			continue
 		}
-		req.Header.Set(canon, v)
+		req.Header.Set(k, v)
 	}
+}
+
+// do derives a child context with timeout from parentCtx, attaches it to req
+// via req.WithContext, executes the request, reads the body (capped at
+// maxBodyBytes), classifies non-200 responses, and unmarshals a 200 into dst.
+// Parent cancellation surfaces as the bare ctx error; a child-only deadline
+// expiry wraps as ErrTransient so the orchestrator's one retry runs against a
+// fresh per-call budget.
+func (d *Doer) do(parentCtx context.Context, req *http.Request, timeout time.Duration, classify Classifier, dst any) error {
+	ctx, cancel := context.WithTimeout(parentCtx, timeout)
+	defer cancel()
+	req = req.WithContext(ctx)
+	origURL := req.URL.String()
+	method := req.Method
+	start := time.Now()
 
 	resp, doErr := d.Client.Do(req)
 	elapsed := time.Since(start)
 
 	if doErr != nil {
-		d.log(url, doErr.Error(), elapsed)
+		d.log(method, origURL, doErr.Error(), elapsed)
 		if errors.Is(doErr, context.Canceled) || errors.Is(doErr, context.DeadlineExceeded) {
 			// Parent cancelled/timed out → bare ctx error (real cancellation semantics).
 			// Child-only deadline (parent alive) → ErrTransient so the orchestrator's
@@ -130,14 +139,14 @@ func (d *Doer) GetJSON(parentCtx context.Context, url, token string, timeout tim
 
 	// Use the final URL after any redirects so logs/errors name the endpoint
 	// that actually answered.
-	finalURL := url
+	finalURL := origURL
 	if resp.Request != nil && resp.Request.URL != nil {
 		finalURL = resp.Request.URL.String()
 	}
 
 	body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
 	if readErr != nil {
-		d.log(finalURL, readErr.Error(), elapsed)
+		d.log(method, finalURL, readErr.Error(), elapsed)
 		if parentCtx.Err() != nil {
 			return parentCtx.Err()
 		}
@@ -151,24 +160,65 @@ func (d *Doer) GetJSON(parentCtx context.Context, url, token string, timeout tim
 	// proxy) still surfaces as ErrAuthDenied/ErrTransient. The classifier's
 	// body argument is capped at maxBodyBytes+1; Snip truncates further.
 	if resp.StatusCode != http.StatusOK {
-		d.log(finalURL, fmt.Sprintf("HTTP %d", resp.StatusCode), elapsed)
+		d.log(method, finalURL, fmt.Sprintf("HTTP %d", resp.StatusCode), elapsed)
 		return classify(finalURL, resp.StatusCode, body)
 	}
 	// Size guard applies to successful responses where we'd otherwise try to
 	// unmarshal the body. An oversized 200 is a contract violation we won't
 	// pretend to handle.
 	if int64(len(body)) > maxBodyBytes {
-		d.log(finalURL, fmt.Sprintf("body exceeds %d bytes", maxBodyBytes), elapsed)
+		d.log(method, finalURL, fmt.Sprintf("body exceeds %d bytes", maxBodyBytes), elapsed)
 		return fmt.Errorf("response body from %s exceeds %d bytes", finalURL, maxBodyBytes)
 	}
-	d.log(finalURL, "ok", elapsed)
+	d.log(method, finalURL, "ok", elapsed)
 	if err := json.Unmarshal(body, dst); err != nil {
 		return fmt.Errorf("non-JSON response from %s: %w: %s", finalURL, err, Snip(body))
 	}
 	return nil
 }
 
-func (d *Doer) log(url, outcome string, elapsed time.Duration) {
+// GetJSON performs GET url with Bearer auth, runs classify on non-200, and
+// unmarshals a 200 body into dst. timeout is the per-call deadline derived
+// inside GetJSON from parentCtx — callers pass their parent ctx unchanged so
+// GetJSON can distinguish parent cancellation (bare context error) from a
+// child-only deadline (wrapped as ErrTransient so the orchestrator retries).
+func (d *Doer) GetJSON(parentCtx context.Context, url, token string, timeout time.Duration, dst any, classify Classifier) error {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	d.setCommonHeaders(req)
+	// Set Authorization last so the bearer token wins over any Authorization
+	// entry in extraHeaders (which setCommonHeaders may have applied).
+	req.Header.Set("Authorization", "Bearer "+token)
+	return d.do(parentCtx, req, timeout, classify, dst)
+}
+
+// PostForm performs POST rawURL with an application/x-www-form-urlencoded body
+// encoded from values, runs classify on non-200, and unmarshals a 200 into dst.
+// No Authorization header is set by PostForm itself — the Claude refresh
+// endpoint authenticates via the form body (grant_type + refresh_token).
+// Callers that need Authorization on a POST may supply it via extraHeaders
+// and it will be forwarded as-is.
+//
+// Redirect note: req.GetBody is not set, so a 307/308 redirect from the
+// endpoint would send an empty body on the redirected request. The Anthropic
+// refresh endpoint is not expected to issue 307/308 redirects; document here
+// if that assumption is ever violated.
+func (d *Doer) PostForm(parentCtx context.Context, rawURL string, values url.Values, timeout time.Duration, dst any, classify Classifier) error {
+	body := strings.NewReader(values.Encode())
+	req, err := http.NewRequest(http.MethodPost, rawURL, body)
+	if err != nil {
+		return err
+	}
+	d.setCommonHeaders(req)
+	// Set Content-Type after setCommonHeaders so it cannot be overridden by
+	// an extraHeaders["Content-Type"] entry.
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return d.do(parentCtx, req, timeout, classify, dst)
+}
+
+func (d *Doer) log(method, url, outcome string, elapsed time.Duration) {
 	if d.Debug == nil {
 		return
 	}
@@ -177,7 +227,7 @@ func (d *Doer) log(url, outcome string, elapsed time.Duration) {
 	// serialization (see ConcurrencySafeWriter). outcome can carry an
 	// upstream error body via Snip — sanitize so embedded newlines don't
 	// fracture the [debug] line into multiple physical lines.
-	fmt.Fprintf(d.Debug, "[debug] %s: GET %s -> %s (%dms)\n", d.ProviderID, url, SanitizeDebugLine(outcome), elapsed.Milliseconds())
+	fmt.Fprintf(d.Debug, "[debug] %s: %s %s -> %s (%dms)\n", d.ProviderID, method, url, SanitizeDebugLine(outcome), elapsed.Milliseconds())
 }
 
 // SanitizeDebugLine collapses control characters (notably CR and LF) in s

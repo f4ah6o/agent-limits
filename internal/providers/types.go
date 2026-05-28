@@ -52,7 +52,8 @@ type Provider interface {
 // ProviderOutput is what a provider returns on success. The map key is the
 // limit-window name (e.g. "five_hour", "seven_day", "month").
 type ProviderOutput struct {
-	Limits map[string]Limit
+	Limits   map[string]Limit
+	Accounts []AccountResult
 }
 
 // Limit is one usage window for one provider.
@@ -103,15 +104,51 @@ func (r Report) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// AccountResult is one stored Claude account's contribution to a ProviderResult.
+// Active is intentionally not omitempty — false is meaningful (the account is
+// stored but not currently live). Limits uses omitempty so a per-account fetch
+// error omits the key entirely rather than emitting null.
+type AccountResult struct {
+	Email  string           `json:"email"`
+	UUID   string           `json:"uuid"`
+	Plan   string           `json:"plan"`
+	Active bool             `json:"active"`
+	Limits map[string]Limit `json:"limits,omitempty"`
+	Error  string           `json:"error,omitempty"`
+}
+
 // ProviderResult is one provider's contribution to the Report.
 //
 // Error uses omitempty so a successful provider serializes without an
-// "error" key. Limits always serializes: success-with-windows →
-// `"limits": {...}`; success-with-zero-windows → `"limits": {}`;
-// failure → `"limits": null` (the orchestrator stores only Error, leaving
-// Limits as the nil map). `{}` and `null` together let scripted callers
-// distinguish "asked, got nothing" from "failed".
+// "error" key.
+//
+// Limits serialization depends on whether Accounts is populated:
+//   - Accounts empty (Codex/Copilot path): Limits always serializes —
+//     success-with-windows → `"limits": {...}`, zero-windows → `"limits": {}`,
+//     failure → `"limits": null`. `{}` vs `null` lets callers distinguish
+//     "asked, got nothing" from "failed".
+//   - Accounts non-empty (Claude multi-account path): Limits is the
+//     active-account compatibility projection. When nil (active account fetch
+//     error), the key is omitted entirely — callers that care should read
+//     Accounts. When non-nil, Limits serializes normally.
 type ProviderResult struct {
-	Limits map[string]Limit `json:"limits"`
-	Error  string           `json:"error,omitempty"`
+	Limits   map[string]Limit `json:"limits"`
+	Accounts []AccountResult  `json:"accounts,omitempty"`
+	Error    string           `json:"error,omitempty"`
+}
+
+func (r ProviderResult) MarshalJSON() ([]byte, error) {
+	if len(r.Accounts) > 0 && r.Limits == nil {
+		// Multi-account path: active account had a fetch error; omit limits key.
+		return json.Marshal(struct {
+			Accounts []AccountResult `json:"accounts"`
+			Error    string          `json:"error,omitempty"`
+		}{Accounts: r.Accounts, Error: r.Error})
+	}
+	// Legacy path (Codex/Copilot) or non-nil limits: always include limits.
+	return json.Marshal(struct {
+		Limits   map[string]Limit `json:"limits"`
+		Accounts []AccountResult  `json:"accounts,omitempty"`
+		Error    string           `json:"error,omitempty"`
+	}{Limits: r.Limits, Accounts: r.Accounts, Error: r.Error})
 }

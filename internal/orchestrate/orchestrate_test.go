@@ -296,6 +296,129 @@ func TestRun_LimitsJSONShape_SuccessEmptyVsFailure(t *testing.T) {
 	}
 }
 
+// TestRun_AccountMixedResult_ExitZero: one ok account + one error account with
+// nil Fetch error → StatusOK. Per-account errors don't flip the exit code.
+func TestRun_AccountMixedResult_ExitZero(t *testing.T) {
+	okAcc := providers.AccountResult{
+		Email: "a@example.com", UUID: "uuid-a", Active: true,
+		Limits: map[string]providers.Limit{"five_hour": {UsedPercent: 10, RemainingPercent: 90}},
+	}
+	errAcc := providers.AccountResult{Email: "b@example.com", UUID: "uuid-b", Error: "HTTP 503"}
+	p := &stubProvider{id: "claude", results: []stubResult{{
+		out: providers.ProviderOutput{Accounts: []providers.AccountResult{okAcc, errAcc}},
+	}}}
+	r, status := Run(context.Background(), []string{"claude"}, []providers.Provider{p}, Options{})
+	if status != StatusOK {
+		t.Errorf("status = %d, want OK (per-account errors do not flip exit code)", status)
+	}
+	result := r.Providers["claude"]
+	if len(result.Accounts) != 2 {
+		t.Fatalf("expected 2 accounts, got %d", len(result.Accounts))
+	}
+	if result.Accounts[0].Error != "" {
+		t.Errorf("accounts[0] (ok) should have no error, got %q", result.Accounts[0].Error)
+	}
+	if result.Accounts[1].Error == "" {
+		t.Errorf("accounts[1] should carry per-account error string")
+	}
+	if result.Error != "" {
+		t.Errorf("provider-level Error should be empty, got %q", result.Error)
+	}
+}
+
+// TestRun_AccountAllError_TransientRetrySucceeds: all-error accounts + ErrTransient
+// on first call → orchestrator retries; second call returns one ok account → StatusOK.
+func TestRun_AccountAllError_TransientRetrySucceeds(t *testing.T) {
+	errAccounts := []providers.AccountResult{
+		{Email: "a@example.com", UUID: "uuid-a", Error: "HTTP 503"},
+		{Email: "b@example.com", UUID: "uuid-b", Error: "HTTP 503"},
+	}
+	okAcc := providers.AccountResult{
+		Email: "a@example.com", UUID: "uuid-a", Active: true,
+		Limits: map[string]providers.Limit{"five_hour": {UsedPercent: 5, RemainingPercent: 95}},
+	}
+	p := &stubProvider{id: "claude", results: []stubResult{
+		{
+			out: providers.ProviderOutput{Accounts: errAccounts},
+			err: fmt.Errorf("%w: all accounts failed", providers.ErrTransient),
+		},
+		{
+			out: providers.ProviderOutput{Accounts: []providers.AccountResult{okAcc}},
+		},
+	}}
+	r, status := Run(context.Background(), []string{"claude"}, []providers.Provider{p}, Options{})
+	if status != StatusOK {
+		t.Errorf("status = %d, want OK after transient retry succeeds", status)
+	}
+	if p.calls.Load() != 2 {
+		t.Errorf("expected 2 calls (initial + retry), got %d", p.calls.Load())
+	}
+	result := r.Providers["claude"]
+	if len(result.Accounts) != 1 {
+		t.Fatalf("expected 1 account from retry result, got %d", len(result.Accounts))
+	}
+	if result.Accounts[0].Error != "" {
+		t.Errorf("account should have no error after retry: %s", result.Accounts[0].Error)
+	}
+	if result.Error != "" {
+		t.Errorf("provider-level Error should be empty after retry, got %q", result.Error)
+	}
+}
+
+// TestRun_AccountAllError_NonTransient_PreservesAccounts: all-error accounts +
+// non-transient provider error → StatusAnyFailed (no retry); account rows preserved.
+func TestRun_AccountAllError_NonTransient_PreservesAccounts(t *testing.T) {
+	errAccounts := []providers.AccountResult{
+		{Email: "a@example.com", UUID: "uuid-a", Error: "auth denied"},
+		{Email: "b@example.com", UUID: "uuid-b", Error: "auth denied"},
+	}
+	p := &stubProvider{id: "claude", results: []stubResult{{
+		out: providers.ProviderOutput{Accounts: errAccounts},
+		err: fmt.Errorf("%w: all accounts rejected", providers.ErrAuthDenied),
+	}}}
+	r, status := Run(context.Background(), []string{"claude"}, []providers.Provider{p}, Options{})
+	if status != StatusAnyFailed {
+		t.Errorf("status = %d, want AnyFailed", status)
+	}
+	if p.calls.Load() != 1 {
+		t.Errorf("non-transient error must not trigger retry, calls = %d", p.calls.Load())
+	}
+	result := r.Providers["claude"]
+	if len(result.Accounts) != 2 {
+		t.Fatalf("expected 2 preserved account rows, got %d", len(result.Accounts))
+	}
+	if result.Error == "" {
+		t.Errorf("provider-level Error should be set")
+	}
+}
+
+// TestRun_AccountAllError_BareError_PreservesAccounts: all-error accounts + bare
+// (non-classified) Fetch error → StatusAnyFailed (no retry); account rows preserved.
+func TestRun_AccountAllError_BareError_PreservesAccounts(t *testing.T) {
+	errAccounts := []providers.AccountResult{
+		{Email: "a@example.com", UUID: "uuid-a", Error: "timeout"},
+		{Email: "b@example.com", UUID: "uuid-b", Error: "timeout"},
+	}
+	p := &stubProvider{id: "claude", results: []stubResult{{
+		out: providers.ProviderOutput{Accounts: errAccounts},
+		err: fmt.Errorf("network timeout"),
+	}}}
+	r, status := Run(context.Background(), []string{"claude"}, []providers.Provider{p}, Options{})
+	if status != StatusAnyFailed {
+		t.Errorf("status = %d, want AnyFailed", status)
+	}
+	if p.calls.Load() != 1 {
+		t.Errorf("bare error must not trigger retry, calls = %d", p.calls.Load())
+	}
+	result := r.Providers["claude"]
+	if len(result.Accounts) != 2 {
+		t.Fatalf("expected 2 preserved account rows, got %d", len(result.Accounts))
+	}
+	if result.Error == "" {
+		t.Errorf("provider-level Error should be set")
+	}
+}
+
 func TestRun_NowInjection(t *testing.T) {
 	frozen := time.Date(2026, 5, 26, 20, 0, 0, 999_999_999, time.UTC)
 	p := &stubProvider{id: "claude", results: []stubResult{{out: mkOutput(2)}}}
