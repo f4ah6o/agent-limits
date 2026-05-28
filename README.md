@@ -108,7 +108,7 @@ For multi-account Claude, the per-account fetches run sequentially within the Cl
 
 To skip the cache and force a fresh read: `aistat usage --refresh`. The cache is rewritten with the fresh result either way, so the next invocation without the flag still benefits.
 
-`aistat switch` reads through the **same** cache as `aistat usage` — one code path for "give me this account's usage limits," shared by reporting and auto-pick. A recent `aistat usage` call's entries are reused by the next `aistat switch` for both candidate ranking and the "already on best" check. This means a transient rate-limit on one account no longer silently excludes it from auto-pick: the cached value is used instead. The trade-off is that auto-pick decisions can be based on data up to 30 s old — accepted because the failure mode of "exclude a rate-limited account from auto-pick" is strictly worse for the user than the failure mode of "use a 30-second-old number." Use `aistat usage --refresh` immediately before `aistat switch` to force fresh data for the decision.
+`aistat switch` reads through the same cache. To force fresh data for the switch decision, run `aistat usage --refresh` first.
 
 Override the TTL with the `AISTAT_USAGE_CACHE_TTL` env var (e.g. `AISTAT_USAGE_CACHE_TTL=10s`). The default is intentionally conservative. If the cache can't be set up (read-only home, permission denied), it emits a one-time warn on stderr and stays disabled for the rest of the process; `aistat usage` proceeds without caching. A corrupt or truncated file recovers on the next successful fetch — the `Put` overwrites it via atomic rename.
 
