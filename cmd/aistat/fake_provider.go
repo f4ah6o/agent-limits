@@ -52,5 +52,5 @@ func (f *fakeProvider) Fetch(ctx context.Context) (providers.ProviderOutput, err
 			"month": mk(4, 5*24*time.Hour+7*time.Hour),
 		}}, nil
 	}
-	return providers.ProviderOutput{}, fmt.Errorf("unknown fake provider id: %s", f.id)
+	panic("unknown fake provider id: " + f.id)
 }

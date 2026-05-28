@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -37,33 +38,16 @@ func userAgent() string {
 	return fmt.Sprintf("aistat/%s (+%s)", resolvedVersion(), providers.ProjectURL)
 }
 
-var knownServices = buildKnownServices()
-
-func buildKnownServices() map[string]bool {
-	m := make(map[string]bool, len(providers.KnownProviderIDs))
-	for _, id := range providers.KnownProviderIDs {
-		m[id] = true
-	}
-	return m
-}
-
 var helpText = buildHelpText()
 
 func buildHelpText() string {
 	var sb strings.Builder
 	sb.WriteString("aistat — report Claude, Codex, and Copilot usage\n\nUsage:\n  aistat [provider] [flags]\n\nProviders (optional, must be the first argument):\n")
 	for _, id := range providers.KnownProviderIDs {
-		fmt.Fprintf(&sb, "  %-9s Only query %s\n", id, titleProvider(id))
+		fmt.Fprintf(&sb, "  %-9s Only query %s\n", id, providers.Title(id))
 	}
 	sb.WriteString("  (none)    Query all providers\n\nFlags:\n  -h, --human   Render human-readable text instead of JSON (default JSON)\n      --debug   Write per-request and per-provider lines to stderr\n      --version Print version and exit\n      --help    Print this help and exit\n\nExit codes:\n  0  All requested providers succeeded.\n  1  One or more requested providers failed at runtime.\n  2  Usage error (unknown provider, malformed flags).\n  3  Stdout write error (broken pipe, disk full).\n")
 	return sb.String()
-}
-
-// titleProvider upper-cases the first byte of a provider ID. Provider IDs in
-// this package are ASCII and guaranteed non-empty by KnownProviderIDs; do not
-// use for arbitrary strings.
-func titleProvider(id string) string {
-	return strings.ToUpper(id[:1]) + id[1:]
 }
 
 func main() {
@@ -73,7 +57,7 @@ func main() {
 func run(args []string, stdout, stderr io.Writer) int {
 	var service string
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		if !knownServices[args[0]] {
+		if !slices.Contains(providers.KnownProviderIDs, args[0]) {
 			fmt.Fprintf(stderr, "unexpected argument: %s (provider must be one of %s)\n",
 				args[0], strings.Join(providers.KnownProviderIDs, ", "))
 			return int(orchestrate.StatusUsageError)
@@ -115,11 +99,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	requested := selectedProviders(service)
 
 	serialStderr := httpx.NewConcurrencySafeWriter(stderr)
-	chosen, orchDebug, missing := buildProviders(serialStderr, *debugFlag, fakeFn, requested)
-	if len(missing) > 0 {
-		fmt.Fprintf(stderr, "provider not available: %s\n", strings.Join(missing, ", "))
-		return int(orchestrate.StatusUsageError)
-	}
+	chosen, orchDebug := buildProviders(serialStderr, *debugFlag, fakeFn)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

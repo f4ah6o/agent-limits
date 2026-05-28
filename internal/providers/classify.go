@@ -7,11 +7,11 @@ import (
 	"time"
 )
 
-// ClassifyCredError wraps a credential-reader error in ErrAuthMissing when it
+// classifyCredError wraps a credential-reader error in ErrAuthMissing when it
 // matches the provided notFound sentinel; returns err unchanged otherwise (so
 // ctx.Canceled / DeadlineExceeded and unknown errors pass through). Centralises
 // the boilerplate every provider's Fetch opens with.
-func ClassifyCredError(err error, notFound error) error {
+func classifyCredError(err error, notFound error) error {
 	if err == nil {
 		return nil
 	}
@@ -30,7 +30,7 @@ func ReadTokenWithTimeout(ctx context.Context, readToken func(context.Context) (
 	defer cancel()
 	tok, err := readToken(credCtx)
 	if err != nil {
-		return "", ClassifyCredError(err, notFound)
+		return "", classifyCredError(err, notFound)
 	}
 	return tok, nil
 }

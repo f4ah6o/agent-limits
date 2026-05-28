@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"strings"
 	"time"
 )
 
@@ -25,6 +26,12 @@ const iso8601Layout = "2006-01-02T15:04:05-07:00"
 // requested-set when no provider is specified, and the CLI help text all
 // derive from this slice. Treat as immutable.
 var KnownProviderIDs = []string{"claude", "codex", "copilot"}
+
+// Title returns the human-readable section label for a known provider ID.
+// The caller must pass a non-empty ID from KnownProviderIDs.
+func Title(id string) string {
+	return strings.ToUpper(id[:1]) + id[1:]
+}
 
 // ProjectURL is the upstream repository for this binary. Used in the User-Agent
 // (so endpoint owners can identify the client) and as the prefix for

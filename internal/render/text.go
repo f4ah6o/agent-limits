@@ -30,7 +30,7 @@ func Text(w io.Writer, r providers.Report, requested []string) error {
 		if !ok {
 			continue
 		}
-		title := titleProvider(id) + " usage"
+		title := providers.Title(id) + " usage"
 		if result.Error != "" {
 			sections = append(sections, title+": "+result.Error)
 			continue
@@ -72,13 +72,6 @@ func Text(w io.Writer, r providers.Report, requested []string) error {
 		return err
 	}
 	return nil
-}
-
-// titleProvider upper-cases the first byte of a provider ID. Provider IDs are
-// ASCII and guaranteed non-empty by the orchestrator; do not use for arbitrary
-// strings.
-func titleProvider(id string) string {
-	return strings.ToUpper(id[:1]) + id[1:]
 }
 
 func formatLimitLine(label string, l providers.Limit) string {

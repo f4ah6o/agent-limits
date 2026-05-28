@@ -12,13 +12,13 @@ func TestClassifyCredError(t *testing.T) {
 	other := errors.New("other failure")
 
 	t.Run("nil_input", func(t *testing.T) {
-		if got := ClassifyCredError(nil, notFound); got != nil {
+		if got := classifyCredError(nil, notFound); got != nil {
 			t.Errorf("nil input → %v, want nil", got)
 		}
 	})
 
 	t.Run("matching_sentinel_wraps_ErrAuthMissing", func(t *testing.T) {
-		got := ClassifyCredError(notFound, notFound)
+		got := classifyCredError(notFound, notFound)
 		if !errors.Is(got, ErrAuthMissing) {
 			t.Errorf("missing ErrAuthMissing in chain: %v", got)
 		}
@@ -28,7 +28,7 @@ func TestClassifyCredError(t *testing.T) {
 	})
 
 	t.Run("non_matching_passes_through", func(t *testing.T) {
-		got := ClassifyCredError(other, notFound)
+		got := classifyCredError(other, notFound)
 		if got != other {
 			t.Errorf("expected pass-through identity, got %v", got)
 		}
@@ -39,10 +39,10 @@ func TestClassifyCredError(t *testing.T) {
 
 	t.Run("preserves_nested_chain", func(t *testing.T) {
 		// Real-world shape: cred reader wraps the sentinel AND an inner
-		// fs.ErrPermission via %w: %w. ClassifyCredError then wraps that.
+		// fs.ErrPermission via %w: %w. classifyCredError then wraps that.
 		// errors.Is should traverse every layer.
 		inner := fmt.Errorf("%w: HOME unset: %w", notFound, fs.ErrPermission)
-		got := ClassifyCredError(inner, notFound)
+		got := classifyCredError(inner, notFound)
 		if !errors.Is(got, ErrAuthMissing) {
 			t.Errorf("missing ErrAuthMissing in nested chain: %v", got)
 		}

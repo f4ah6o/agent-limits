@@ -38,18 +38,16 @@ func wrapWarn(out io.Writer) func(string) {
 	return func(s string) { fmt.Fprintln(out, "aistat: "+s) }
 }
 
-// buildProviders resolves the provider set (fake-mode-first), picks the
-// orchestrator debug writer, and computes which requested IDs are not
-// available. Extracted from run() to keep that function scannable and to
-// provide a non-CLI seam for tests that exercise warn-wiring against the
-// real provider construction. The mutex inside serialStderr is always in
-// the path because copilot.warn is unconditional.
+// buildProviders resolves the provider set (fake-mode-first) and picks the
+// orchestrator debug writer. Extracted from run() to keep that function
+// scannable and to provide a non-CLI seam for tests that exercise
+// warn-wiring against the real provider construction. The mutex inside
+// serialStderr is always in the path because copilot.warn is unconditional.
 func buildProviders(
 	serialStderr *httpx.ConcurrencySafeWriter,
 	includeDebug bool,
 	fakeFn func() []providers.Provider,
-	requested []string,
-) (chosen []providers.Provider, orchDebug io.Writer, missing []string) {
+) (chosen []providers.Provider, orchDebug io.Writer) {
 	if fakeFn != nil {
 		chosen = fakeFn()
 	}
@@ -59,14 +57,5 @@ func buildProviders(
 	if includeDebug {
 		orchDebug = serialStderr
 	}
-	available := map[string]struct{}{}
-	for _, p := range chosen {
-		available[p.ID()] = struct{}{}
-	}
-	for _, id := range requested {
-		if _, ok := available[id]; !ok {
-			missing = append(missing, id)
-		}
-	}
-	return chosen, orchDebug, missing
+	return chosen, orchDebug
 }
