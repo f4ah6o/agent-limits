@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/drogers0/aistat/v2/internal/accounts"
 	"github.com/drogers0/aistat/v2/internal/cred"
-	"github.com/drogers0/aistat/v2/internal/httpx"
 	"github.com/drogers0/aistat/v2/internal/orchestrate"
 	"github.com/drogers0/aistat/v2/internal/providers"
 	"github.com/drogers0/aistat/v2/internal/providers/claude"
@@ -56,51 +54,11 @@ var (
 	fetchLiveUsage = realFetchLiveUsage
 )
 
-// switchUsageWindow is the per-window shape returned by the Anthropic usage API.
-// It mirrors claude.window; defined here because claude.fetchLimits is unexported.
-type switchUsageWindow struct {
-	Utilization float64 `json:"utilization"`
-	ResetsAt    *string `json:"resets_at"`
-}
-
-// realFetchLiveUsage fetches usage limits for the given access token from the
-// Anthropic usage endpoint. Called in auto-pick mode to read the active account's
-// current headroom for the D13 "already on best" comparison.
+// realFetchLiveUsage fetches usage limits for the given access token via the
+// Claude provider's FetchUsage method. Called in auto-pick mode to read the
+// active account's current headroom for the D13 "already on best" comparison.
 func realFetchLiveUsage(ctx context.Context, token, ua string, debug io.Writer) (map[string]providers.Limit, error) {
-	doer := httpx.NewDoer(
-		&http.Client{CheckRedirect: httpx.RejectSchemeDowngrade},
-		ua, "claude",
-		map[string]string{"Anthropic-Beta": "oauth-2025-04-20"},
-		debug,
-	)
-	var raw map[string]*switchUsageWindow
-	if err := doer.GetJSON(ctx, "https://api.anthropic.com/api/oauth/usage", token, 10*time.Second, &raw, httpx.DefaultClassify); err != nil {
-		return nil, err
-	}
-	now := time.Now().UTC().Truncate(time.Second)
-	limits := map[string]providers.Limit{}
-	for _, key := range []string{"five_hour", "seven_day", "seven_day_sonnet"} {
-		win := raw[key]
-		if win == nil || win.ResetsAt == nil {
-			continue
-		}
-		resets, err := time.Parse(time.RFC3339Nano, *win.ResetsAt)
-		if err != nil {
-			return nil, fmt.Errorf("claude window %s has unparseable resets_at %q: %w", key, *win.ResetsAt, err)
-		}
-		resets = resets.UTC().Truncate(time.Second)
-		secs := int(resets.Sub(now).Seconds())
-		if secs < 0 {
-			secs = 0
-		}
-		limits[key] = providers.Limit{
-			UsedPercent:       win.Utilization,
-			RemainingPercent:  100 - win.Utilization,
-			ResetsAt:          resets,
-			ResetAfterSeconds: secs,
-		}
-	}
-	return limits, nil
+	return claude.New(debug, ua).FetchUsage(ctx, token)
 }
 
 // realSwitchLookupActiveUUID reads the live credential and resolves the

@@ -132,6 +132,14 @@ func (c *Client) readLiveCredential(ctx context.Context) (*cred.Credential, erro
 	return &cr, nil
 }
 
+// FetchUsage calls the usage endpoint with accessToken and returns the parsed
+// limits. Exposed so cmd/aistat/switch can read the currently-active account's
+// headroom for D13's "already on best" comparison without re-implementing the
+// window parser; FetchForSwitch returns only the non-active rows.
+func (c *Client) FetchUsage(ctx context.Context, accessToken string) (map[string]providers.Limit, error) {
+	return c.fetchLimits(ctx, accessToken)
+}
+
 // fetchLimits calls the usage endpoint with accessToken and returns the parsed
 // limits. ctx is expected to already carry the pool budget; perAccountBudget is
 // used as the per-call ceiling within that budget.
