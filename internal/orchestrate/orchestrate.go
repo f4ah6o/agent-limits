@@ -25,6 +25,7 @@ type ExitStatus int
 const (
 	StatusOK          ExitStatus = 0
 	StatusAnyFailed   ExitStatus = 1
+	StatusUsageError  ExitStatus = 2
 	StatusRenderError ExitStatus = 3
 )
 

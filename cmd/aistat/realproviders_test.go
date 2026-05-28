@@ -22,7 +22,7 @@ func TestWrapWarn_PrefixesLines(t *testing.T) {
 
 func TestRealProviders_ReturnsThreeInOrder(t *testing.T) {
 	var buf bytes.Buffer
-	safe := &httpx.ConcurrencySafeWriter{W: &buf}
+	safe := httpx.NewConcurrencySafeWriter(&buf)
 	got := realProviders(safe, false)
 	if len(got) != 3 {
 		t.Fatalf("want 3 providers, got %d", len(got))

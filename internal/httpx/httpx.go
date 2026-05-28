@@ -18,19 +18,17 @@ import (
 )
 
 // Doer is a thin wrapper around *http.Client that provides the request/response
-// pipeline shared by every provider. Header application order: Authorization
-// and User-Agent are set first, then a default `Accept: application/json`, then
-// ExtraHeaders are applied last and override remaining defaults. Authorization
-// and User-Agent are reserved — entries in ExtraHeaders for those keys
-// (canonical or otherwise) are silently dropped so a misconfigured provider
-// cannot accidentally clobber the bearer token or user-agent. Providers needing
-// a non-JSON Accept (e.g. Copilot's `application/vnd.github+json`) supply it
-// via ExtraHeaders. A future endpoint on the same Doer that needs a different
-// Accept must use a per-request header instead — this Doer cannot
-// differentiate by URL. Acceptable today since each provider has its own Doer.
-//
-// ExtraHeaders must not be mutated after construction; it is read by GetJSON
-// concurrently with other requests sharing the same Doer.
+// pipeline shared by every provider. Construct with NewDoer. Header application
+// order: Authorization and User-Agent are set first, then a default
+// `Accept: application/json`, then extraHeaders are applied last and override
+// remaining defaults. Authorization and User-Agent are reserved — entries in
+// extraHeaders for those keys (canonical or otherwise) are silently dropped so
+// a misconfigured provider cannot accidentally clobber the bearer token or
+// user-agent. Providers needing a non-JSON Accept (e.g. Copilot's
+// `application/vnd.github+json`) supply it via extraHeaders. A future endpoint
+// on the same Doer that needs a different Accept must use a per-request header
+// instead — this Doer cannot differentiate by URL. Acceptable today since each
+// provider has its own Doer.
 //
 // Redirect behavior: stdlib follows up to 10 redirects and strips Authorization
 // across host changes; RejectSchemeDowngrade (installed by every provider's
@@ -40,7 +38,7 @@ type Doer struct {
 	Client       *http.Client
 	UserAgent    string
 	ProviderID   string            // included in debug log prefix so concurrent provider lines are greppable
-	ExtraHeaders map[string]string // applied last, overrides defaults; must not be mutated post-construction
+	extraHeaders map[string]string // applied last, overrides defaults
 	Debug        io.Writer         // nil disables per-request logging; pass a *ConcurrencySafeWriter when sharing across providers
 }
 
@@ -67,7 +65,7 @@ func NewDoer(client *http.Client, userAgent, providerID string, extraHeaders map
 		Client:       client,
 		UserAgent:    userAgent,
 		ProviderID:   providerID,
-		ExtraHeaders: extraHeaders,
+		extraHeaders: extraHeaders,
 		Debug:        debug,
 	}
 }
@@ -104,7 +102,7 @@ func (d *Doer) GetJSON(parentCtx context.Context, url, token string, timeout tim
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("User-Agent", d.UserAgent)
 	req.Header.Set("Accept", "application/json")
-	for k, v := range d.ExtraHeaders {
+	for k, v := range d.extraHeaders {
 		canon := http.CanonicalHeaderKey(k)
 		if canon == "Authorization" || canon == "User-Agent" {
 			continue
@@ -228,15 +226,19 @@ func DefaultClassify(url string, status int, body []byte) error {
 // ConcurrencySafeWriter wraps an io.Writer with a mutex so concurrent Write
 // calls (e.g. from multiple providers' Doers writing to the same stderr) do
 // not interleave mid-line. Callers pass the same instance to every Doer.
-// W is required; construct with &ConcurrencySafeWriter{W: w}. Behavior with
-// a nil W is undefined.
+// Construct with NewConcurrencySafeWriter.
 type ConcurrencySafeWriter struct {
 	mu sync.Mutex
-	W  io.Writer
+	w  io.Writer
+}
+
+// NewConcurrencySafeWriter returns a ConcurrencySafeWriter wrapping w.
+func NewConcurrencySafeWriter(w io.Writer) *ConcurrencySafeWriter {
+	return &ConcurrencySafeWriter{w: w}
 }
 
 func (c *ConcurrencySafeWriter) Write(p []byte) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.W.Write(p)
+	return c.w.Write(p)
 }

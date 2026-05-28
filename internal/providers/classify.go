@@ -1,8 +1,10 @@
 package providers
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // ClassifyCredError wraps a credential-reader error in ErrAuthMissing when it
@@ -17,4 +19,18 @@ func ClassifyCredError(err error, notFound error) error {
 		return fmt.Errorf("%w: %w", ErrAuthMissing, err)
 	}
 	return err
+}
+
+// ReadTokenWithTimeout runs readToken under a derived ctx with the given
+// timeout. On a notFound match (errors.Is), wraps as ErrAuthMissing. Any
+// other error is returned as-is (including ctx.Err()). Centralises the
+// cred-prelude every provider's Fetch opens with.
+func ReadTokenWithTimeout(ctx context.Context, readToken func(context.Context) (string, error), notFound error, timeout time.Duration) (string, error) {
+	credCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	tok, err := readToken(credCtx)
+	if err != nil {
+		return "", ClassifyCredError(err, notFound)
+	}
+	return tok, nil
 }

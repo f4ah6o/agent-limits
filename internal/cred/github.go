@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-const GitHubTokenMissingMessage = "github token unavailable — run `gh auth login` (if 'Not Found', run `gh auth refresh -h github.com -s user` to add the required scope)"
+const GitHubTokenMissingMessage = "github token unavailable — run `gh auth login` (if 'Not Found', either the token lacks the `user` scope (`gh auth refresh -h github.com -s user`) or the account has no Copilot premium-request billing data yet)"
 
 var ErrGitHubTokenNotFound = errors.New(GitHubTokenMissingMessage)
 

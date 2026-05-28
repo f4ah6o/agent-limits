@@ -19,6 +19,9 @@ func ReadClaudeToken(ctx context.Context) (string, error) {
 		"-s", "Claude Code-credentials", "-w")
 	out, err := cmd.Output()
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", ctxErr
+		}
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
 			// /usr/bin/security exits 44 (errSecItemNotFound, defined in

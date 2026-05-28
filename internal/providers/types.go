@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
-	"strings"
 	"time"
 )
 
@@ -37,15 +36,6 @@ const ProjectURL = "https://github.com/drogers0/aistat"
 // can file a bug with the exact context already in the message.
 const IssueTrackerURL = ProjectURL + "/issues"
 
-// Title returns the provider ID with its first byte upper-cased. Provider IDs
-// in this package are ASCII; do not use for arbitrary strings.
-func Title(id string) string {
-	if id == "" {
-		return ""
-	}
-	return strings.ToUpper(id[:1]) + id[1:]
-}
-
 // Provider is the contract every credential+endpoint backend implements.
 type Provider interface {
 	ID() string
@@ -69,16 +59,10 @@ type Limit struct {
 // MarshalJSON emits the four documented fields in the documented order, with
 // ResetsAt formatted as "+00:00" instead of Go's default "Z" and percent
 // fields rounded to 2 decimal places to suppress float artifacts (e.g. an
-// internal value of 67.339999999 becomes 67.34 on the wire). A zero ResetsAt
-// is rejected here as a defensive contract guard — every provider must populate
-// the field, and silently emitting "0001-01-01T00:00:00+00:00" would be worse
-// than failing loudly. The fields are listed manually rather than via the
-// "type alias + embed" trick because Go's encoding/json does not deduplicate
-// struct fields by JSON tag.
+// internal value of 67.339999999 becomes 67.34 on the wire). The fields are
+// listed manually rather than via the "type alias + embed" trick because
+// Go's encoding/json does not deduplicate struct fields by JSON tag.
 func (l Limit) MarshalJSON() ([]byte, error) {
-	if l.ResetsAt.IsZero() {
-		return nil, errors.New("Limit.MarshalJSON: ResetsAt is zero — provider must populate this field")
-	}
 	return json.Marshal(struct {
 		UsedPercent       float64 `json:"used_percent"`
 		RemainingPercent  float64 `json:"remaining_percent"`
@@ -114,19 +98,13 @@ func (r Report) MarshalJSON() ([]byte, error) {
 
 // ProviderResult is one provider's contribution to the Report.
 //
-// Error is set if and only if Fetch returned non-nil. On success, Limits
-// may be empty: a provider responded but returned no recognized window
-// (e.g. an upstream schema change renamed every known window key). Scripted
-// callers should treat "absent error + empty limits" as "provider responded
-// with nothing to show," distinct from a failure.
-//
-// Invariant for provider implementations: do NOT set Limits to a non-nil
-// empty map after parsing. Always nil it out when the parsed window set
-// is empty so the omitempty tag suppresses the "limits": {} key uniformly.
-//
-// Both fields use omitempty so a successful provider serializes without an
-// "error" key and a failed one without an empty "limits" key.
+// Error uses omitempty so a successful provider serializes without an
+// "error" key. Limits always serializes: success-with-windows →
+// `"limits": {...}`; success-with-zero-windows → `"limits": {}`;
+// failure → `"limits": null` (the orchestrator stores only Error, leaving
+// Limits as the nil map). `{}` and `null` together let scripted callers
+// distinguish "asked, got nothing" from "failed".
 type ProviderResult struct {
-	Limits map[string]Limit `json:"limits,omitempty"`
+	Limits map[string]Limit `json:"limits"`
 	Error  string           `json:"error,omitempty"`
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -19,12 +18,7 @@ func newTestClient(t *testing.T, body []byte, status int, captureReq *http.Reque
 	t.Helper()
 	srv := testutil.NewStubServer(t, body, status, captureReq)
 	return &Client{
-		doer: &httpx.Doer{
-			Client:       srv.Client(),
-			UserAgent:    "aistat-test/0",
-			ProviderID:   "claude",
-			ExtraHeaders: map[string]string{"Anthropic-Beta": betaHeader},
-		},
+		doer:      httpx.NewDoer(srv.Client(), "aistat-test/0", "claude", map[string]string{"Anthropic-Beta": betaHeader}, nil),
 		endpoint:  srv.URL + "/api/oauth/usage",
 		readToken: func(ctx context.Context) (string, error) { return "sk-ant-oat01-fake", nil },
 		now:       time.Now,
@@ -120,41 +114,6 @@ func TestFetch_RequestShape(t *testing.T) {
 	}
 }
 
-func TestFetch_Status401IsAuthDenied(t *testing.T) {
-	c := newTestClient(t, []byte(`{"error":"unauthorized"}`), 401, nil)
-	_, err := c.Fetch(context.Background())
-	if !errors.Is(err, providers.ErrAuthDenied) {
-		t.Errorf("err should wrap ErrAuthDenied: %v", err)
-	}
-	if !strings.Contains(err.Error(), "unauthorized") {
-		t.Errorf("err should include body: %v", err)
-	}
-}
-
-func TestFetch_Status408IsTransient(t *testing.T) {
-	c := newTestClient(t, []byte("timeout"), 408, nil)
-	_, err := c.Fetch(context.Background())
-	if !errors.Is(err, providers.ErrTransient) {
-		t.Errorf("408 should be transient: %v", err)
-	}
-}
-
-func TestFetch_Status429IsTransient(t *testing.T) {
-	c := newTestClient(t, []byte("too many"), 429, nil)
-	_, err := c.Fetch(context.Background())
-	if !errors.Is(err, providers.ErrTransient) {
-		t.Errorf("429 should be transient: %v", err)
-	}
-}
-
-func TestFetch_Status503IsTransient(t *testing.T) {
-	c := newTestClient(t, []byte("down"), 503, nil)
-	_, err := c.Fetch(context.Background())
-	if !errors.Is(err, providers.ErrTransient) {
-		t.Errorf("503 should be transient: %v", err)
-	}
-}
-
 func TestFetch_Status418IsBareError(t *testing.T) {
 	c := newTestClient(t, []byte("teapot"), 418, nil)
 	_, err := c.Fetch(context.Background())
@@ -163,43 +122,6 @@ func TestFetch_Status418IsBareError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "HTTP 418") {
 		t.Errorf("err should mention HTTP 418: %v", err)
-	}
-}
-
-func TestFetch_NetworkErrorIsTransient(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	srv.Close() // shut down before any request
-	c := &Client{
-		doer:      &httpx.Doer{Client: srv.Client(), UserAgent: "aistat-test/0", ProviderID: "claude"},
-		endpoint:  srv.URL,
-		readToken: func(ctx context.Context) (string, error) { return "tok", nil },
-		now:       time.Now,
-	}
-	_, err := c.Fetch(context.Background())
-	if !errors.Is(err, providers.ErrTransient) {
-		t.Errorf("network error should be transient: %v", err)
-	}
-}
-
-func TestFetch_CancelledContextIsNotTransient(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(time.Second)
-	}))
-	defer srv.Close()
-	c := &Client{
-		doer:      &httpx.Doer{Client: srv.Client(), UserAgent: "aistat-test/0", ProviderID: "claude"},
-		endpoint:  srv.URL,
-		readToken: func(ctx context.Context) (string, error) { return "tok", nil },
-		now:       time.Now,
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	_, err := c.Fetch(ctx)
-	if errors.Is(err, providers.ErrTransient) {
-		t.Errorf("cancelled context should not be transient: %v", err)
-	}
-	if !errors.Is(err, context.Canceled) {
-		t.Errorf("expected context.Canceled, got %v", err)
 	}
 }
 

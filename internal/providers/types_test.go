@@ -70,13 +70,6 @@ func TestLimitMarshalJSON_WholeNumberHasNoDecimal(t *testing.T) {
 	}
 }
 
-func TestLimitMarshalJSON_RejectsZeroResetsAt(t *testing.T) {
-	_, err := json.Marshal(Limit{UsedPercent: 50, RemainingPercent: 50, ResetAfterSeconds: 100})
-	if err == nil || !strings.Contains(err.Error(), "ResetsAt") {
-		t.Fatalf("expected ResetsAt error, got %v", err)
-	}
-}
-
 func TestLimitMarshalJSON_RoundsFloatArtifact(t *testing.T) {
 	l := Limit{UsedPercent: 67.339999999, RemainingPercent: 32.660000001, ResetsAt: time.Unix(1, 0)}
 	b, _ := json.Marshal(l)
@@ -101,29 +94,19 @@ func TestReportMarshalJSON(t *testing.T) {
 	}
 }
 
-func TestTitle(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"claude", "Claude"},
-		{"codex", "Codex"},
-		{"copilot", "Copilot"},
-		{"", ""},
+func TestProviderResult_LimitsAlwaysEmitted(t *testing.T) {
+	// Failure case: nil limits, error populated → "limits":null, error key
+	// present.
+	b, _ := json.Marshal(ProviderResult{Error: "boom"})
+	if got := string(b); got != `{"limits":null,"error":"boom"}` {
+		t.Fatalf("failure shape wrong, got %s", got)
 	}
-	for _, c := range cases {
-		if got := Title(c.in); got != c.want {
-			t.Errorf("Title(%q) = %q, want %q", c.in, got, c.want)
-		}
+	// Success case: zero limits, no error → "limits":{} and no error key.
+	b, _ = json.Marshal(ProviderResult{Limits: map[string]Limit{}})
+	if got := string(b); got != `{"limits":{}}` {
+		t.Fatalf("success-empty shape wrong, got %s", got)
 	}
-}
-
-func TestProviderResultOmitempty(t *testing.T) {
-	b, _ := json.Marshal(ProviderResult{})
-	if string(b) != "{}" {
-		t.Fatalf("empty ProviderResult should marshal to {}, got %s", string(b))
-	}
-	b, _ = json.Marshal(ProviderResult{Error: "boom"})
-	if string(b) != `{"error":"boom"}` {
-		t.Fatalf("got %s", string(b))
-	}
+	// Success with a populated limit → no error key.
 	at, _ := time.Parse(time.RFC3339, "2026-05-26T20:00:00Z")
 	b, _ = json.Marshal(ProviderResult{Limits: map[string]Limit{"x": {ResetsAt: at}}})
 	if strings.Contains(string(b), `"error"`) {

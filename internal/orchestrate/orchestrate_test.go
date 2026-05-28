@@ -3,6 +3,7 @@ package orchestrate
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -134,7 +135,7 @@ func TestRun_DebugWritesPerAttempt(t *testing.T) {
 	// debug lines don't interleave mid-write. (Real CLI does the same via
 	// realProviders wiring.)
 	var buf bytes.Buffer
-	safe := &httpx.ConcurrencySafeWriter{W: &buf}
+	safe := httpx.NewConcurrencySafeWriter(&buf)
 	p1 := &stubProvider{id: "claude", results: []stubResult{{out: mkOutput(2)}}}
 	p2 := &stubProvider{id: "codex", results: []stubResult{
 		{err: fmt.Errorf("%w: HTTP 503", providers.ErrTransient)},
@@ -158,7 +159,7 @@ func TestFetchOnce_DebugLineSingleLineOnMultilineError(t *testing.T) {
 	// newlines. The orchestrator's [debug] line must stay single-line so
 	// grep '\[debug\]' counts requests, not response paragraphs.
 	var buf bytes.Buffer
-	safe := &httpx.ConcurrencySafeWriter{W: &buf}
+	safe := httpx.NewConcurrencySafeWriter(&buf)
 	p := &stubProvider{id: "claude", results: []stubResult{
 		{err: fmt.Errorf("HTTP 500: <html>\nline two\nline three</html>")},
 	}}
@@ -260,6 +261,38 @@ func TestRun_DuplicateRequestedDedupes(t *testing.T) {
 	}
 	if len(r.Providers) != 1 {
 		t.Errorf("expected one result, got %d", len(r.Providers))
+	}
+}
+
+// TestRun_LimitsJSONShape_SuccessEmptyVsFailure asserts the contract scripted
+// callers rely on to distinguish "asked, got nothing" from "failed": a
+// success-with-empty-windows provider serializes as `"limits": {}` (with no
+// error key); a failed provider serializes as `"limits": null` with an error
+// key. The test runs the real orchestrator code path so any future provider
+// regression that re-introduces a `len==0 → nil` block (which would defeat
+// the {} side of the distinction) is caught here.
+func TestRun_LimitsJSONShape_SuccessEmptyVsFailure(t *testing.T) {
+	emptySuccess := &stubProvider{id: "claude", results: []stubResult{{out: providers.ProviderOutput{Limits: map[string]providers.Limit{}}}}}
+	failure := &stubProvider{id: "codex", results: []stubResult{{err: fmt.Errorf("%w: missing", providers.ErrAuthMissing)}}}
+	report, _ := Run(context.Background(), []string{"claude", "codex"}, []providers.Provider{emptySuccess, failure}, Options{})
+
+	b, err := json.Marshal(report.Providers["claude"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(b); got != `{"limits":{}}` {
+		t.Errorf("success-with-empty shape wrong, got %s", got)
+	}
+	b, err = json.Marshal(report.Providers["codex"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	if !strings.Contains(got, `"limits":null`) {
+		t.Errorf("failure should serialize limits as null, got %s", got)
+	}
+	if !strings.Contains(got, `"error":`) {
+		t.Errorf("failure should include error key, got %s", got)
 	}
 }
 

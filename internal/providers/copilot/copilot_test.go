@@ -17,7 +17,7 @@ import (
 	"github.com/drogers0/aistat/internal/testutil"
 )
 
-const testLogin = "REDACTED" // matches testdata/user.json's "login" field
+const testLogin = "testuser" // matches testdata/user.json's "login" field
 
 // routes a httptest server: /user → userFixture; anything matching billing prefix → usageFixture.
 func newRoutedClient(t *testing.T, userFixture, usageFixture []byte, userStatus, usageStatus int, opts ...Option) (*Client, *recordedReqs) {
@@ -408,39 +408,6 @@ func TestFetch_408IsTransient(t *testing.T) {
 	}
 }
 
-func TestFetch_NetworkErrorIsTransient(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	srv.Close()
-	c := New(nil, "aistat-test/0")
-	c.doer.Client = srv.Client()
-	c.userURL = srv.URL + "/user"
-	c.readToken = func(ctx context.Context) (string, error) { return "tok", nil }
-	_, err := c.Fetch(context.Background())
-	if !errors.Is(err, providers.ErrTransient) {
-		t.Errorf("network error should be transient: %v", err)
-	}
-}
-
-func TestFetch_CancelledContextIsNotTransient(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(time.Second)
-	}))
-	defer srv.Close()
-	c := New(nil, "aistat-test/0")
-	c.doer.Client = srv.Client()
-	c.userURL = srv.URL + "/user"
-	c.readToken = func(ctx context.Context) (string, error) { return "tok", nil }
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	_, err := c.Fetch(ctx)
-	if errors.Is(err, providers.ErrTransient) {
-		t.Errorf("cancelled context should not be transient: %v", err)
-	}
-	if !errors.Is(err, context.Canceled) {
-		t.Errorf("expected context.Canceled, got: %v", err)
-	}
-}
-
 func TestFetch_TokenMissingIsAuthMissing(t *testing.T) {
 	c, _ := newRoutedClient(t, testutil.LoadFixture(t, "user.json"), testutil.LoadFixture(t, "usage.json"), 200, 200)
 	c.readToken = func(ctx context.Context) (string, error) { return "", cred.ErrGitHubTokenNotFound }
@@ -531,6 +498,40 @@ func TestFetch_ResetTimeStartOfNextMonth(t *testing.T) {
 	}
 }
 
+func TestFetch_ResetMonthUsesPostBillingNow(t *testing.T) {
+	// Wall clock crosses a UTC month boundary between urlNow (pre-billing)
+	// and subNow (post-billing). Reset must be the first of the month AFTER
+	// subNow's month — not after urlNow's. Driving reset off urlNow's month
+	// (Jan) would compute Feb 1 00:00:00, which is in the past relative to
+	// subNow (Feb 1 00:00:05) and surface as reset_after_seconds=0.
+	urlNow := time.Date(2026, 1, 31, 23, 59, 55, 0, time.UTC)
+	subNow := time.Date(2026, 2, 1, 0, 0, 5, 0, time.UTC)
+	clocks := []time.Time{urlNow, subNow}
+	var idx int
+	c, _ := newRoutedClient(t,
+		testutil.LoadFixture(t, "user.json"),
+		testutil.LoadFixture(t, "usage.json"),
+		200, 200,
+		WithNow(func() time.Time {
+			t := clocks[idx]
+			idx++
+			return t
+		}),
+	)
+	out, err := c.Fetch(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantReset := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	if got := out.Limits["month"].ResetsAt; !got.Equal(wantReset) {
+		t.Errorf("ResetsAt = %v, want %v (must reflect subNow's month, not urlNow's)", got, wantReset)
+	}
+	wantSecs := int(wantReset.Sub(subNow).Seconds())
+	if got := out.Limits["month"].ResetAfterSeconds; got != wantSecs {
+		t.Errorf("ResetAfterSeconds = %d, want %d", got, wantSecs)
+	}
+}
+
 func TestFetch_ResetSecondsRecomputedAfterBillingCall(t *testing.T) {
 	// Two increasing `now` values returned on successive calls.
 	// idx==0 used for urlNow; idx==1 used for subNow → reset_after_seconds
@@ -563,8 +564,6 @@ func TestFetch_ResetSecondsRecomputedAfterBillingCall(t *testing.T) {
 type deadlineCapturingTransport struct {
 	inner     http.RoundTripper
 	deadlines []time.Time
-	sleeps    []time.Duration // optional per-call pre-roundtrip sleep
-	idx       int
 }
 
 func (t *deadlineCapturingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -573,17 +572,14 @@ func (t *deadlineCapturingTransport) RoundTrip(req *http.Request) (*http.Respons
 	} else {
 		t.deadlines = append(t.deadlines, time.Time{})
 	}
-	if t.idx < len(t.sleeps) {
-		time.Sleep(t.sleeps[t.idx])
-	}
-	t.idx++
 	return t.inner.RoundTrip(req)
 }
 
 func TestFetch_BothCallsGetIndependentDeadlines(t *testing.T) {
 	// Two stub responses, served via a routed server; transport captures the
-	// per-request ctx deadline. The 20ms sleep on call 1 forces wall-clock
-	// separation so the two WithTimeout derivations land at different times.
+	// per-request ctx deadline. A c.now that advances 5s between captures
+	// forces wall-clock separation so the two WithTimeout derivations land at
+	// different absolute times without any time.Sleep.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/user" {
 			w.WriteHeader(200)
@@ -594,8 +590,13 @@ func TestFetch_BothCallsGetIndependentDeadlines(t *testing.T) {
 		w.Write(testutil.LoadFixture(t, "usage.json"))
 	}))
 	t.Cleanup(srv.Close)
-	tr := &deadlineCapturingTransport{inner: srv.Client().Transport, sleeps: []time.Duration{20 * time.Millisecond}}
-	c := New(nil, "aistat-test/0")
+	tr := &deadlineCapturingTransport{inner: srv.Client().Transport}
+	base := time.Date(2026, 5, 15, 12, 0, 0, 0, time.UTC)
+	var idx int
+	c := New(nil, "aistat-test/0", WithNow(func() time.Time {
+		defer func() { idx++ }()
+		return base.Add(time.Duration(idx) * 5 * time.Second)
+	}))
 	c.doer.Client = &http.Client{Transport: tr}
 	c.readToken = func(ctx context.Context) (string, error) { return "gho_fake", nil }
 	c.userURL = srv.URL + "/user"
@@ -611,8 +612,7 @@ func TestFetch_BothCallsGetIndependentDeadlines(t *testing.T) {
 	if tr.deadlines[0].IsZero() || tr.deadlines[1].IsZero() {
 		t.Fatalf("both calls must have a deadline; got %v", tr.deadlines)
 	}
-	if delta := tr.deadlines[1].Sub(tr.deadlines[0]); delta < 10*time.Millisecond {
-		t.Errorf("second call's deadline should be later by ≥10ms (proves independent derivation); got delta=%v", delta)
+	if tr.deadlines[1].Equal(tr.deadlines[0]) {
+		t.Errorf("second call's deadline must differ from the first (proves independent derivation); got both = %v", tr.deadlines[0])
 	}
 }
-

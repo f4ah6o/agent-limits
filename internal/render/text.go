@@ -11,7 +11,7 @@ import (
 
 // textLabels holds the human-facing label and the display order for every
 // known limit key per provider. Update this table whenever a provider adds
-// a new known limit key (mirrors the provider package's own window list).
+// a new known limit key.
 var textLabels = map[string][]struct{ Key, Label string }{
 	"claude":  {{"five_hour", "5-hour"}, {"seven_day", "7-day"}, {"seven_day_sonnet", "7-day sonnet"}},
 	"codex":   {{"five_hour", "5-hour"}, {"seven_day", "7-day"}, {"code_review_seven_day", "Code review 7-day"}},
@@ -30,9 +30,15 @@ func Text(w io.Writer, r providers.Report, requested []string) error {
 		if !ok {
 			continue
 		}
-		title := providers.Title(id) + " usage"
+		title := titleProvider(id) + " usage"
 		if result.Error != "" {
 			sections = append(sections, title+": "+result.Error)
+			continue
+		}
+		if len(result.Limits) == 0 {
+			// Success-with-no-windows is distinguishable from failure in JSON
+			// (`"limits": {}` vs `null`); in text mode we suppress the lone
+			// header row rather than emit a section with only a title.
 			continue
 		}
 		var lines []string
@@ -66,6 +72,13 @@ func Text(w io.Writer, r providers.Report, requested []string) error {
 		return err
 	}
 	return nil
+}
+
+// titleProvider upper-cases the first byte of a provider ID. Provider IDs are
+// ASCII and guaranteed non-empty by the orchestrator; do not use for arbitrary
+// strings.
+func titleProvider(id string) string {
+	return strings.ToUpper(id[:1]) + id[1:]
 }
 
 func formatLimitLine(label string, l providers.Limit) string {

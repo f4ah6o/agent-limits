@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"runtime/debug"
 	"strings"
+	"syscall"
 
 	"github.com/drogers0/aistat/internal/httpx"
 	"github.com/drogers0/aistat/internal/orchestrate"
@@ -52,10 +53,17 @@ func buildHelpText() string {
 	var sb strings.Builder
 	sb.WriteString("aistat — report Claude, Codex, and Copilot usage\n\nUsage:\n  aistat [provider] [flags]\n\nProviders (optional, must be the first argument):\n")
 	for _, id := range providers.KnownProviderIDs {
-		fmt.Fprintf(&sb, "  %-9s Only query %s\n", id, providers.Title(id))
+		fmt.Fprintf(&sb, "  %-9s Only query %s\n", id, titleProvider(id))
 	}
 	sb.WriteString("  (none)    Query all providers\n\nFlags:\n  -h, --human   Render human-readable text instead of JSON (default JSON)\n      --debug   Write per-request and per-provider lines to stderr\n      --version Print version and exit\n      --help    Print this help and exit\n\nExit codes:\n  0  All requested providers succeeded.\n  1  One or more requested providers failed at runtime.\n  2  Usage error (unknown provider, malformed flags).\n  3  Stdout write error (broken pipe, disk full).\n")
 	return sb.String()
+}
+
+// titleProvider upper-cases the first byte of a provider ID. Provider IDs in
+// this package are ASCII and guaranteed non-empty by KnownProviderIDs; do not
+// use for arbitrary strings.
+func titleProvider(id string) string {
+	return strings.ToUpper(id[:1]) + id[1:]
 }
 
 func main() {
@@ -68,15 +76,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 		if !knownServices[args[0]] {
 			fmt.Fprintf(stderr, "unexpected argument: %s (provider must be one of %s)\n",
 				args[0], strings.Join(providers.KnownProviderIDs, ", "))
-			return 2
+			return int(orchestrate.StatusUsageError)
 		}
 		service = args[0]
 		args = args[1:]
-	}
-
-	if err := validateFlagGrammar(args); err != nil {
-		fmt.Fprintln(stderr, err.Error())
-		return 2
 	}
 
 	fs := flag.NewFlagSet("aistat", flag.ContinueOnError)
@@ -92,7 +95,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintln(stderr, err.Error())
-		return 2
+		return int(orchestrate.StatusUsageError)
 	}
 
 	if *help {
@@ -106,19 +109,19 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	if fs.NArg() > 0 {
 		fmt.Fprintf(stderr, "unexpected positional argument: %s (provider must come first, before any flags)\n", fs.Arg(0))
-		return 2
+		return int(orchestrate.StatusUsageError)
 	}
 
 	requested := selectedProviders(service)
 
-	safeStderr := &httpx.ConcurrencySafeWriter{W: stderr}
-	chosen, orchDebug, missing := buildProviders(safeStderr, *debugFlag, fakeFn, requested)
+	serialStderr := httpx.NewConcurrencySafeWriter(stderr)
+	chosen, orchDebug, missing := buildProviders(serialStderr, *debugFlag, fakeFn, requested)
 	if len(missing) > 0 {
 		fmt.Fprintf(stderr, "provider not available: %s\n", strings.Join(missing, ", "))
-		return 2
+		return int(orchestrate.StatusUsageError)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	report, status := orchestrate.Run(ctx, requested, chosen, orchestrate.Options{Debug: orchDebug})
@@ -141,29 +144,4 @@ func selectedProviders(service string) []string {
 		return append([]string(nil), providers.KnownProviderIDs...)
 	}
 	return []string{service}
-}
-
-// validateFlagGrammar rejects single-dash long-form flags so the binary's
-// accepted grammar matches the documented one. Go's flag package accepts
-// both -flag and --flag for long names; we publish --flag only. The
-// single-dash short form -h (length 2) is permitted. The standard
-// end-of-options marker "--" stops the scan so future positionals after
-// flags are unaffected.
-//
-// Known limitation: this is a syntactic pre-pass with no knowledge of
-// which flags take values. Any string-valued flag added in the future
-// MUST be invoked with --name=value syntax, not --name value, or the
-// value will look like a single-dash positional and trip this guard.
-// Today only the fake-build --fake-fail flag is string-valued, and the
-// in-tree tests already use the =value form.
-func validateFlagGrammar(args []string) error {
-	for _, a := range args {
-		if a == "--" {
-			break
-		}
-		if len(a) > 2 && a[0] == '-' && a[1] != '-' {
-			return fmt.Errorf("unrecognized flag: %s (use --%s)", a, strings.TrimLeft(a, "-"))
-		}
-	}
-	return nil
 }

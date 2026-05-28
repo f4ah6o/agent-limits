@@ -11,21 +11,22 @@ import (
 	"github.com/drogers0/aistat/internal/providers/copilot"
 )
 
-// realProviders constructs the live providers. safeStderr is the
+// realProviders constructs the live providers. serialStderr is the
 // mutex-wrapped writer that backs three concurrent stderr consumers
 // (per-Doer debug, orchestrator per-provider summary, Copilot warn), so
-// all three serialize through one mutex. includeDebug toggles per-request
+// all three serialize through one mutex. The mutex is always in the path
+// because copilot.warn is unconditional. includeDebug toggles per-request
 // debug logging — when false, Doers receive a nil Debug writer.
-func realProviders(safeStderr *httpx.ConcurrencySafeWriter, includeDebug bool) []providers.Provider {
+func realProviders(serialStderr *httpx.ConcurrencySafeWriter, includeDebug bool) []providers.Provider {
 	var debugSink io.Writer
 	if includeDebug {
-		debugSink = safeStderr
+		debugSink = serialStderr
 	}
 	ua := userAgent()
 	return []providers.Provider{
 		claude.New(debugSink, ua),
 		codex.New(debugSink, ua),
-		copilot.New(debugSink, ua, copilot.WithWarn(wrapWarn(safeStderr))),
+		copilot.New(debugSink, ua, copilot.WithWarn(wrapWarn(serialStderr))),
 	}
 }
 
@@ -41,9 +42,10 @@ func wrapWarn(out io.Writer) func(string) {
 // orchestrator debug writer, and computes which requested IDs are not
 // available. Extracted from run() to keep that function scannable and to
 // provide a non-CLI seam for tests that exercise warn-wiring against the
-// real provider construction.
+// real provider construction. The mutex inside serialStderr is always in
+// the path because copilot.warn is unconditional.
 func buildProviders(
-	safeStderr *httpx.ConcurrencySafeWriter,
+	serialStderr *httpx.ConcurrencySafeWriter,
 	includeDebug bool,
 	fakeFn func() []providers.Provider,
 	requested []string,
@@ -52,10 +54,10 @@ func buildProviders(
 		chosen = fakeFn()
 	}
 	if chosen == nil {
-		chosen = realProviders(safeStderr, includeDebug)
+		chosen = realProviders(serialStderr, includeDebug)
 	}
 	if includeDebug {
-		orchDebug = safeStderr
+		orchDebug = serialStderr
 	}
 	available := map[string]struct{}{}
 	for _, p := range chosen {

@@ -19,22 +19,12 @@ const (
 	credTimeout = 10 * time.Second
 )
 
-// KnownWindows is the closed set of API keys we surface. Adding an entry here
-// is half of the forward-compat step when Anthropic adds a new public window —
-// the other half is internal/render/text.go's textLabels["claude"]; a tripwire
-// test in internal/render catches the dual-table drift. Any window not listed
-// (seven_day_opus, seven_day_oauth_apps, seven_day_cowork, seven_day_omelette,
-// tangelo, iguana_necktie, omelette_promotional, …) is intentionally filtered
-// out.
-var KnownWindows = []string{"five_hour", "seven_day", "seven_day_sonnet"}
-
 type Client struct {
 	doer      *httpx.Doer
 	endpoint  string
 	readToken func(context.Context) (string, error)
 	// now is the clock-of-record for ResetAfterSeconds truncation. New
-	// initializes to time.Now; tests override via WithNow or by direct
-	// field assignment.
+	// initializes to time.Now; tests override via WithNow.
 	now func() time.Time
 }
 
@@ -73,11 +63,9 @@ type window struct {
 }
 
 func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
-	credCtx, credCancel := context.WithTimeout(ctx, credTimeout)
-	token, err := c.readToken(credCtx)
-	credCancel()
+	token, err := providers.ReadTokenWithTimeout(ctx, c.readToken, cred.ErrClaudeTokenNotFound, credTimeout)
 	if err != nil {
-		return providers.ProviderOutput{}, providers.ClassifyCredError(err, cred.ErrClaudeTokenNotFound)
+		return providers.ProviderOutput{}, err
 	}
 
 	var raw map[string]*window
@@ -91,7 +79,10 @@ func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 	// one second. Accepted as a known trade-off.
 	now := c.now().UTC().Truncate(time.Second)
 	limits := map[string]providers.Limit{}
-	for _, key := range KnownWindows {
+	// Closed set of API keys we surface. Any window not listed
+	// (seven_day_opus, seven_day_oauth_apps, tangelo, iguana_necktie, …) is
+	// intentionally filtered out.
+	for _, key := range []string{"five_hour", "seven_day", "seven_day_sonnet"} {
 		win := raw[key]
 		if win == nil || win.ResetsAt == nil {
 			continue
@@ -111,11 +102,6 @@ func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 			ResetsAt:          resets,
 			ResetAfterSeconds: secs,
 		}
-	}
-	if len(limits) == 0 {
-		// Empty limits is a valid successful state (see ProviderResult doc) —
-		// set to nil so map-omitempty suppresses the "limits": {} key.
-		limits = nil
 	}
 	return providers.ProviderOutput{Limits: limits}, nil
 }

@@ -13,8 +13,7 @@ import (
 
 // ReadClaudeToken returns the OAuth access token from
 // ~/.claude/.credentials.json (the file `claude /login` writes on Linux).
-// ctx is accepted for signature parity; this implementation does no
-// cancellable I/O.
+// ctx is accepted for signature parity; not used by the current implementation.
 //
 // File permissions are the Claude Code CLI's responsibility (it created the
 // file); aistat is a read-only observer and does not police them.

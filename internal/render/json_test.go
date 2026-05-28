@@ -66,7 +66,10 @@ func TestJSON_AlphabeticalProviderOrder(t *testing.T) {
 	}
 }
 
-func TestJSON_ErrorProviderOmitsLimitsKey(t *testing.T) {
+func TestJSON_ErrorProviderEmitsLimitsNull(t *testing.T) {
+	// Contract: failure → "limits": null + "error": <msg>. Combined with
+	// success-with-empty-windows → "limits": {} (no error key), scripted
+	// callers can distinguish "asked, got nothing" from "failed".
 	r := providers.Report{
 		Providers: map[string]providers.ProviderResult{
 			"claude": {Error: "auth failure"},
@@ -75,11 +78,31 @@ func TestJSON_ErrorProviderOmitsLimitsKey(t *testing.T) {
 	var buf bytes.Buffer
 	_ = JSON(&buf, r)
 	s := buf.String()
-	if strings.Contains(s, `"limits"`) {
-		t.Fatalf("limits key should be omitted on error: %s", s)
+	if !strings.Contains(s, `"limits": null`) {
+		t.Fatalf("limits should be null on error: %s", s)
 	}
 	if !strings.Contains(s, `"error": "auth failure"`) {
 		t.Fatalf("missing error: %s", s)
+	}
+}
+
+func TestJSON_SuccessEmptyLimitsEmitsEmptyObject(t *testing.T) {
+	// Counterpart to TestJSON_ErrorProviderEmitsLimitsNull: a successful
+	// provider with zero windows must serialize as "limits": {}, not null
+	// and not absent.
+	r := providers.Report{
+		Providers: map[string]providers.ProviderResult{
+			"claude": {Limits: map[string]providers.Limit{}},
+		},
+	}
+	var buf bytes.Buffer
+	_ = JSON(&buf, r)
+	s := buf.String()
+	if !strings.Contains(s, `"limits": {}`) {
+		t.Fatalf("success-with-empty-limits should serialize as {}, got: %s", s)
+	}
+	if strings.Contains(s, `"error"`) {
+		t.Fatalf("no error key on success: %s", s)
 	}
 }
 

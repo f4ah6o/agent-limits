@@ -15,8 +15,7 @@ const CodexTokenMissingMessage = "codex token not found at ~/.codex/auth.json â€
 var ErrCodexTokenNotFound = errors.New(CodexTokenMissingMessage)
 
 // ReadCodexToken returns the OAuth access token from ~/.codex/auth.json.
-// The ctx parameter is accepted for signature parity with other credential
-// readers; this implementation does no I/O that can be cancelled.
+// ctx is accepted for signature parity; not used by the current implementation.
 func ReadCodexToken(ctx context.Context) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

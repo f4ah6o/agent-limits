@@ -17,11 +17,12 @@ import (
 
 func newDoer(t *testing.T, client *http.Client) *Doer {
 	t.Helper()
-	return &Doer{
-		Client:     client,
-		UserAgent:  "aistat-test/0",
-		ProviderID: "test",
-	}
+	return NewDoer(client, "aistat-test/0", "test", nil, nil)
+}
+
+func newDoerWithExtra(t *testing.T, client *http.Client, extra map[string]string) *Doer {
+	t.Helper()
+	return NewDoer(client, "aistat-test/0", "test", extra, nil)
 }
 
 func TestSanitizeDebugLine(t *testing.T) {
@@ -107,13 +108,12 @@ func TestGetJSON_ExtraHeadersDoesNotOverrideReserved(t *testing.T) {
 		w.Write([]byte(`{}`))
 	}))
 	defer srv.Close()
-	d := newDoer(t, srv.Client())
-	d.ExtraHeaders = map[string]string{
+	d := newDoerWithExtra(t, srv.Client(), map[string]string{
 		"Authorization": "Bearer EVIL",
 		"User-Agent":    "evil/0",
 		"authorization": "Bearer EVIL-lower",
 		"Accept":        "application/vnd.github+json",
-	}
+	})
 	var dst struct{}
 	if err := d.GetJSON(context.Background(), srv.URL, "tok", 10*time.Second, &dst, DefaultClassify); err != nil {
 		t.Fatal(err)
@@ -136,11 +136,10 @@ func TestGetJSON_ExtraHeadersOverrideDefault(t *testing.T) {
 		w.Write([]byte(`{}`))
 	}))
 	defer srv.Close()
-	d := newDoer(t, srv.Client())
-	d.ExtraHeaders = map[string]string{
+	d := newDoerWithExtra(t, srv.Client(), map[string]string{
 		"Accept":         "application/vnd.github+json",
 		"Anthropic-Beta": "oauth-2025-04-20",
-	}
+	})
 	var dst struct{}
 	if err := d.GetJSON(context.Background(), srv.URL, "tok", 10*time.Second, &dst, DefaultClassify); err != nil {
 		t.Fatal(err)
@@ -529,7 +528,7 @@ func TestGetJSON_SchemeDowngradeRejected(t *testing.T) {
 
 func TestConcurrencySafeWriter_NoInterleave(t *testing.T) {
 	var buf bytes.Buffer
-	w := &ConcurrencySafeWriter{W: &buf}
+	w := NewConcurrencySafeWriter(&buf)
 	const N = 1000
 	var wg sync.WaitGroup
 	wg.Add(2)
