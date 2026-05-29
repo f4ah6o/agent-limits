@@ -1,4 +1,6 @@
-<h1 align="center">aistat</h1>
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/88121e24-4f65-4976-8c60-a9e379f339bc" alt="aistat banner" width="640">
+</p>
 
 <p align="center">
   <em>Usage limits and instant account switching for Claude, Codex, and Copilot — from one terminal command, turning scattered LLM logins into one coordinated budget.</em>
@@ -78,6 +80,12 @@ AISTAT_VERSION=v2.1.0 curl -fsSL https://raw.githubusercontent.com/drogers0/aist
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/drogers0/aistat/main/install.sh | sh -s -- --prefix=$HOME/bin
+```
+
+**Don't touch my shell rc:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/drogers0/aistat/main/install.sh | sh -s -- --no-modify-path
 ```
 
 **`go install` (requires Go 1.22+):**
