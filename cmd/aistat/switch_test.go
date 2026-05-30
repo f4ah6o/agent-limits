@@ -231,6 +231,7 @@ func TestSwitch_ToAlreadyActive(t *testing.T) {
 // Case 6: auto-pick, personal 80% remaining, work 20% (work is active) → picks personal.
 func TestSwitch_AutoPickHigherHeadroom(t *testing.T) {
 	ms := withMemoryStore(t)
+	withCodexMemoryStore(t) // isolate from any real Codex store on dev machines
 	now := time.Now()
 	seedAccount(t, ms, "uuid-work", "work@example.com", "default_claude_max_20x", now.Add(-2*time.Hour))
 	seedAccount(t, ms, "uuid-personal", "personal@example.com", "default_claude_max_5x", now.Add(-1*time.Hour))
@@ -267,6 +268,7 @@ func TestSwitch_AutoPickHigherHeadroom(t *testing.T) {
 // Case 7: auto-pick with active already best → exit 0, "already on best account (<email>)".
 func TestSwitch_AutoPickActiveAlreadyBest(t *testing.T) {
 	ms := withMemoryStore(t)
+	withCodexMemoryStore(t)
 	now := time.Now()
 	seedAccount(t, ms, "uuid-personal", "personal@example.com", "default_claude_max_5x", now.Add(-1*time.Hour))
 	seedAccount(t, ms, "uuid-work", "work@example.com", "default_claude_max_20x", now.Add(-2*time.Hour))
@@ -301,6 +303,7 @@ func TestSwitch_AutoPickActiveAlreadyBest(t *testing.T) {
 // the one with the more recent LastSeenAt wins.
 func TestSwitch_AutoPickTiebreaker(t *testing.T) {
 	ms := withMemoryStore(t)
+	withCodexMemoryStore(t)
 	now := time.Now()
 	// accountA: 82% remaining, last seen 2 hours ago (floor(82/5)=16)
 	// accountB: 80% remaining, last seen 1 hour ago  (floor(80/5)=16)
@@ -341,6 +344,7 @@ func TestSwitch_AutoPickTiebreaker(t *testing.T) {
 // FetchForSwitch); the other wins.
 func TestSwitch_AutoPickOneFailing(t *testing.T) {
 	ms := withMemoryStore(t)
+	withCodexMemoryStore(t)
 	now := time.Now()
 	seedAccount(t, ms, "uuid-active", "active@example.com", "default_claude_max_5x", now.Add(-1*time.Hour))
 	seedAccount(t, ms, "uuid-good", "good@example.com", "default_claude_max_20x", now.Add(-30*time.Minute))
@@ -375,6 +379,7 @@ func TestSwitch_AutoPickOneFailing(t *testing.T) {
 // Case 10: auto-pick with ALL non-active accounts failing fetch → exit 2.
 func TestSwitch_AutoPickAllFailing(t *testing.T) {
 	ms := withMemoryStore(t)
+	withCodexMemoryStore(t)
 	now := time.Now()
 	seedAccount(t, ms, "uuid-active", "active@example.com", "default_claude_max_5x", now.Add(-1*time.Hour))
 	seedAccount(t, ms, "uuid-other", "other@example.com", "default_claude_max_20x", now.Add(-2*time.Hour))
@@ -401,6 +406,7 @@ func TestSwitch_AutoPickAllFailing(t *testing.T) {
 // Case 10b: FetchForSwitch returns an error → exit 2 with usage-fetch error message.
 func TestSwitch_AutoPickFetchError(t *testing.T) {
 	ms := withMemoryStore(t)
+	withCodexMemoryStore(t)
 	now := time.Now()
 	seedAccount(t, ms, "uuid-active", "active@example.com", "default_claude_max_5x", now.Add(-1*time.Hour))
 	seedAccount(t, ms, "uuid-other", "other@example.com", "default_claude_max_20x", now.Add(-2*time.Hour))
