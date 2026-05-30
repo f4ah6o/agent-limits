@@ -13,7 +13,7 @@ import (
 	"github.com/drogers0/aistat/v2/internal/providers"
 )
 
-// stubSwitchClient implements switchClaudeClient for tests.
+// stubSwitchClient implements switchable for tests.
 type stubSwitchClient struct {
 	fetchResults    []providers.AccountResult
 	fetchErr        error
@@ -33,7 +33,7 @@ func (s *stubSwitchClient) ReconcileAndPersist(_ context.Context) error {
 func withSwitchClient(t *testing.T, stub *stubSwitchClient) {
 	t.Helper()
 	old := newSwitchClient
-	newSwitchClient = func(_ io.Writer, _ string, _ accounts.Store) switchClaudeClient {
+	newSwitchClient = func(_ io.Writer, _ string, _ accounts.Store) switchable {
 		return stub
 	}
 	t.Cleanup(func() { newSwitchClient = old })
@@ -178,17 +178,18 @@ func TestSwitch_ToUUIDPrefixHappyPath(t *testing.T) {
 	}
 }
 
-// Case 3: auto-pick with zero stored accounts → missing-credentials error.
+// Case 3: auto-pick with both stores empty → bulk sees no eligible providers.
 func TestSwitch_AutoPickZeroStored(t *testing.T) {
-	withMemoryStore(t) // empty store
+	withMemoryStore(t)      // empty Claude store
+	withCodexMemoryStore(t) // empty Codex store
 	withSwitchActiveUUID(t, "")
 
 	r := runSwitchTest()
-	if r.code != 2 {
-		t.Fatalf("expected exit 2, got %d", r.code)
+	if r.code != 0 {
+		t.Fatalf("expected exit 0, got %d (stderr: %q)", r.code, r.stderr)
 	}
-	if !strings.Contains(r.stderr, "claude /login") {
-		t.Errorf("missing login hint: %q", r.stderr)
+	if !strings.Contains(r.stderr, "no providers have multiple stored accounts") {
+		t.Errorf("missing expected message: %q", r.stderr)
 	}
 }
 
@@ -423,19 +424,19 @@ func TestSwitch_AutoPickFetchError(t *testing.T) {
 	}
 }
 
-// Case 11: only one account stored and it is active → exit 2.
+// Case 11: Claude has one account, Codex empty → bulk sees no eligible providers.
 func TestSwitch_OnlyOneAccountActive(t *testing.T) {
 	ms := withMemoryStore(t)
 	seedAccount(t, ms, "uuid-personal", "personal@example.com", "default_claude_max_5x", time.Now())
+	withCodexMemoryStore(t) // empty Codex store
 	withSwitchActiveUUID(t, "uuid-personal")
 
 	r := runSwitchTest()
-	if r.code != 2 {
-		t.Fatalf("expected exit 2, got %d", r.code)
+	if r.code != 0 {
+		t.Fatalf("expected exit 0, got %d (stderr: %q)", r.code, r.stderr)
 	}
-	want := "only one account stored; nothing to switch to (run `claude /login` to add another)"
-	if !strings.Contains(r.stderr, want) {
-		t.Errorf("wrong error: %q", r.stderr)
+	if !strings.Contains(r.stderr, "no providers have multiple stored accounts") {
+		t.Errorf("missing expected message: %q", r.stderr)
 	}
 }
 
@@ -511,19 +512,23 @@ func (f *failListStore) List(_ context.Context) ([]accounts.Account, error) {
 func (f *failListStore) Upsert(_ context.Context, _ accounts.Account) error { return nil }
 func (f *failListStore) Delete(_ context.Context, _ string) error            { return nil }
 
-// Extra: store.List failure after successful open → exit 2.
+// Extra: store.List failure after successful open routes through runSwitchInferProvider
+// (because --to is given without a provider). The list error is collected and emitted
+// with the "could not list accounts" format. The Codex store opens empty (no match),
+// so the overall result is no match → exit 2.
 func TestSwitch_StoreListFailure(t *testing.T) {
 	old := openAccountStore
 	openAccountStore = func(_ io.Writer) (accounts.Store, error) {
 		return &failListStore{listErr: errors.New("disk I/O error")}, nil
 	}
 	t.Cleanup(func() { openAccountStore = old })
+	withCodexMemoryStore(t) // empty Codex store for determinism
 
 	r := runSwitchTest("--to", "anyone")
 	if r.code != 2 {
 		t.Fatalf("expected exit 2, got %d", r.code)
 	}
-	if !strings.Contains(r.stderr, "aistat: claude: could not open account store: disk I/O error") {
+	if !strings.Contains(r.stderr, "aistat: claude: could not list accounts: disk I/O error") {
 		t.Errorf("wrong error: %q", r.stderr)
 	}
 }
