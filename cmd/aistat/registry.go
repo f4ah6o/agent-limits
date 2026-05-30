@@ -19,7 +19,7 @@ import (
 // because copilot.warn is unconditional. includeDebug toggles per-request
 // debug logging — when false, Doers receive a nil Debug writer.
 //
-// The platform account store is opened here and passed to the Claude client
+// Platform account stores are opened here for Claude and Codex and passed
 // via WithStore. On open failure the warn is emitted unconditionally (not
 // gated on --debug, so the user sees keychain breakage) and a MemoryStore
 // is used as a safe no-op fallback: List returns empty, Upsert/Delete are
@@ -40,10 +40,16 @@ func realProviders(serialStderr *httpx.ConcurrencySafeWriter, includeDebug bool,
 		store = accounts.NewMemoryStore()
 	}
 
+	codexStore, codexStoreErr := accounts.OpenStore(accounts.ProviderCodex, accounts.WithDebug(storeDebug))
+	if codexStoreErr != nil {
+		fmt.Fprintln(serialStderr, "aistat: codex: could not open account store ("+codexStoreErr.Error()+"); proceeding with live credential only")
+		codexStore = accounts.NewMemoryStore()
+	}
+
 	v := resolvedVersion()
 	return []providers.Provider{
 		claude.New(debugSink, claude.DefaultUserAgent(v), claude.WithStore(store), claude.WithCacheBypass(cacheBypass)),
-		codex.New(debugSink, codex.DefaultUserAgent(v)),
+		codex.New(debugSink, codex.DefaultUserAgent(v), codex.WithStore(codexStore), codex.WithCacheBypass(cacheBypass)),
 		copilot.New(debugSink, copilot.DefaultUserAgent(v), copilot.WithWarn(wrapWarn(serialStderr))),
 	}
 }

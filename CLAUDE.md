@@ -57,7 +57,7 @@ These are the principles every change should respect. When in doubt, optimize fo
 ## Working in this repo
 
 - Run `go test ./...` (and `go test -race ./...`) before declaring a change done. Use `go vet ./...` and `staticcheck` (pinned in CI to `2025.1.1`) for static checks. CI runs on both ubuntu-latest and macos-latest — fix Linux failures locally with `GOOS=linux go vet ./... && GOOS=linux ~/go/bin/staticcheck ./...`.
-- Fake-mode smoke (`go build -tags=fake -o /tmp/aistat ./cmd/aistat && /tmp/aistat --fake -h`) renders the nested Claude account format without touching real credentials. Vet + staticcheck under `-tags=fake` are part of the smoke surface.
+- Fake-mode smoke (`go build -tags=fake -o /tmp/aistat ./cmd/aistat && /tmp/aistat --fake`) renders all providers (Claude + Codex + Copilot) in JSON without touching real credentials; add `-h` for human-readable. Vet + staticcheck under `-tags=fake` are part of the smoke surface.
 - The Claude provider is macOS/Linux-only. macOS reads/writes the Keychain item `Claude Code-credentials` (and the per-account store at service `aistat:accounts:claude:<uuid>`); Linux reads/writes `~/.claude/.credentials.json` and the per-account store at `~/.config/aistat/accounts/claude.json`. Codex and Copilot are portable.
 - The module path is `github.com/drogers0/aistat/v2`. Go 1.22+.
 - Live tests are gated behind env vars (`AISTAT_LIVE=1` for multi-account smoke; `AISTAT_LIVE_KEYCHAIN=1` for darwin keychain write tests). CI does not set either.
