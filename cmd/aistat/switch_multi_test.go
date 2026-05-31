@@ -25,9 +25,10 @@ func withCodexMemoryStore(t *testing.T) *accounts.MemoryStore {
 
 // stubCodexSwitchClient implements switchable for Codex switch tests.
 type stubCodexSwitchClient struct {
-	fetchResults    []providers.AccountResult
-	fetchErr        error
-	reconcileCalled bool
+	fetchResults       []providers.AccountResult
+	fetchErr           error
+	reconcileCalled    bool
+	postSwitchVerifyFn func(context.Context, accounts.Account) error
 }
 
 func (s *stubCodexSwitchClient) FetchForSwitch(_ context.Context) ([]providers.AccountResult, error) {
@@ -36,6 +37,13 @@ func (s *stubCodexSwitchClient) FetchForSwitch(_ context.Context) ([]providers.A
 
 func (s *stubCodexSwitchClient) ReconcileAndPersist(_ context.Context) error {
 	s.reconcileCalled = true
+	return nil
+}
+
+func (s *stubCodexSwitchClient) PostSwitchVerify(ctx context.Context, target accounts.Account) error {
+	if s.postSwitchVerifyFn != nil {
+		return s.postSwitchVerifyFn(ctx, target)
+	}
 	return nil
 }
 

@@ -24,6 +24,7 @@ import (
 type switchable interface {
 	FetchForSwitch(ctx context.Context) ([]providers.AccountResult, error)
 	ReconcileAndPersist(ctx context.Context) error
+	PostSwitchVerify(ctx context.Context, target accounts.Account) error
 }
 
 // Package-level injection seams — overridden by tests.
@@ -398,6 +399,12 @@ func runSwitchSingle(ctx context.Context, h switchHandle, toArg string, stdout, 
 	_ = h.client.ReconcileAndPersist(ctx)
 
 	fmt.Fprintf(stdout, "switched to %s (uuid %s); was %s\n", target.Email, target.UUID, prevEmail)
+	if err := h.client.PostSwitchVerify(ctx, target); err != nil {
+		if errors.Is(err, providers.ErrAuthDenied) {
+			fmt.Fprintf(stderr, "aistat: %s: switched-to account's tokens are not usable: %s\n", h.id, err)
+		}
+		// Other errors (network/etc.) are silently ignored — the switch succeeded; verify is courtesy.
+	}
 	return 0
 }
 

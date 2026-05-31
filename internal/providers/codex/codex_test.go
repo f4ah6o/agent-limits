@@ -1416,3 +1416,175 @@ func TestFetch_UnknownDurationBucket(t *testing.T) {
 		t.Errorf("window_86400s must appear for unknown limit_window_seconds=86400, got: %v", keys(limits))
 	}
 }
+
+// ── refreshErrorMessage tests (Step 5 / B#3) ──────────────────────────────────
+
+// TestRefreshErrorMessage_StaleRefreshToken verifies that an error containing
+// "refresh_token already" returns msgStaleRefresh even when ErrRefreshRejected
+// is also wrapped (the strings.Contains branch must win over errors.Is).
+func TestRefreshErrorMessage_StaleRefreshToken(t *testing.T) {
+err := fmt.Errorf("%w: HTTP 400 from https://auth.openai.com/oauth/token: refresh_token already used", ErrRefreshRejected)
+got := refreshErrorMessage(err)
+if got != msgStaleRefresh {
+t.Errorf("refreshErrorMessage = %q, want %q", got, msgStaleRefresh)
+}
+}
+
+// TestRefreshErrorMessage_PassthroughKeepsExisting verifies that ErrRefreshRejected
+// and ErrRefreshEndpointBroken still return their existing strings.
+func TestRefreshErrorMessage_PassthroughKeepsExisting(t *testing.T) {
+rejErr := fmt.Errorf("%w: HTTP 400 bad grant", ErrRefreshRejected)
+got := refreshErrorMessage(rejErr)
+if !strings.Contains(got, "account credential expired") {
+t.Errorf("ErrRefreshRejected: refreshErrorMessage = %q, want 'account credential expired'", got)
+}
+
+brokenErr := fmt.Errorf("%w: HTTP 404 from endpoint", ErrRefreshEndpointBroken)
+got2 := refreshErrorMessage(brokenErr)
+if !strings.Contains(got2, "refresh endpoint rejected request") {
+t.Errorf("ErrRefreshEndpointBroken: refreshErrorMessage = %q, want 'refresh endpoint rejected request'", got2)
+}
+}
+
+// ── Fetch token_revoked tightening tests (Step 5 / D1) ───────────────────────
+
+// TestFetch_TokenRevokedSurfacesTightString verifies that a 401 token_revoked
+// response produces a tightened ar.Error containing msgTokensRevoked, not the
+// raw "HTTP 401" prefix.
+func TestFetch_TokenRevokedSurfacesTightString(t *testing.T) {
+revokedBody := []byte(`{"error":{"code":"token_revoked","message":"Encountered invalidated oauth token"}}`)
+
+acctA := makeCodexAccount("uuid-a", "alice@example.com", "tok-a", "ref-a", 0)
+store := accounts.NewMemoryStore()
+_ = store.Upsert(context.Background(), acctA)
+live := makeCodexCred("tok-a", "ref-a", 0)
+
+usageSrv := stubStaticServer(t, 401, revokedBody)
+c := buildClient(t, usageSrv, noRefreshServer(t), live, store, noLookupCall(t), nil, nil)
+
+out, _ := c.Fetch(context.Background())
+if len(out.Accounts) != 1 {
+t.Fatalf("expected 1 account, got %d", len(out.Accounts))
+}
+ar := out.Accounts[0]
+if !strings.Contains(ar.Error, msgTokensRevoked) {
+t.Errorf("ar.Error = %q, want substring %q", ar.Error, msgTokensRevoked)
+}
+if strings.Contains(ar.Error, "HTTP 401") {
+t.Errorf("ar.Error should not contain raw 'HTTP 401' prefix: %q", ar.Error)
+}
+}
+
+// TestFetch_AuthDeniedOtherBodyFallsThrough verifies that a 401 with a non-token_revoked
+// body does not trigger the tightening (no false-positive).
+func TestFetch_AuthDeniedOtherBodyFallsThrough(t *testing.T) {
+otherBody := []byte(`{"error":{"code":"some_other_error","message":"unexpected"}}`)
+
+acctA := makeCodexAccount("uuid-a", "alice@example.com", "tok-a", "ref-a", 0)
+store := accounts.NewMemoryStore()
+_ = store.Upsert(context.Background(), acctA)
+live := makeCodexCred("tok-a", "ref-a", 0)
+
+usageSrv := stubStaticServer(t, 401, otherBody)
+c := buildClient(t, usageSrv, noRefreshServer(t), live, store, noLookupCall(t), nil, nil)
+
+out, _ := c.Fetch(context.Background())
+if len(out.Accounts) != 1 {
+t.Fatalf("expected 1 account, got %d", len(out.Accounts))
+}
+ar := out.Accounts[0]
+if ar.Error == "" {
+t.Error("ar.Error must be non-empty for auth-denied")
+}
+if strings.Contains(ar.Error, msgTokensRevoked) {
+t.Errorf("non-token_revoked body should not trigger tightening: %q", ar.Error)
+}
+}
+
+// ── FetchForSwitch warn-hint tests (Step 5 / D3) ──────────────────────────────
+
+// TestFetchForSwitch_TokenRevokedWarnHint verifies that a 401 token_revoked response
+// produces a warn containing "`codex login`" and "stored credential rejected".
+func TestFetchForSwitch_TokenRevokedWarnHint(t *testing.T) {
+revokedBody := []byte(`{"error":{"code":"token_revoked","message":"Encountered invalidated oauth token"}}`)
+
+acctA := makeCodexAccount("uuid-a", "alice@example.com", "tok-a", "ref-a", 0)
+store := accounts.NewMemoryStore()
+_ = store.Upsert(context.Background(), acctA)
+
+usageSrv := stubStaticServer(t, 401, revokedBody)
+var warnBuf bytes.Buffer
+c := buildClient(t, usageSrv, noRefreshServer(t), nil, store, noLookupCall(t), &warnBuf, nil)
+
+results, err := c.FetchForSwitch(context.Background())
+if err != nil {
+t.Fatal(err)
+}
+if len(results) != 0 {
+t.Errorf("expected 0 results (account excluded), got %d", len(results))
+}
+warn := warnBuf.String()
+if !strings.Contains(warn, "`codex login`") {
+t.Errorf("warn should contain '`codex login`': %q", warn)
+}
+if !strings.Contains(warn, "stored credential rejected") {
+t.Errorf("warn should contain 'stored credential rejected': %q", warn)
+}
+if strings.Contains(warn, "`aistat usage`") {
+t.Errorf("token_revoked should not suggest `aistat usage`: %q", warn)
+}
+}
+
+// TestFetchForSwitch_OtherAuthDeniedKeepsAistatUsageHint verifies that a 401 with
+// a non-token_revoked body keeps the existing `aistat usage` hint.
+func TestFetchForSwitch_OtherAuthDeniedKeepsAistatUsageHint(t *testing.T) {
+otherBody := []byte(`{"error":{"code":"unauthorized","message":"bad token"}}`)
+
+acctA := makeCodexAccount("uuid-a", "alice@example.com", "tok-a", "ref-a", 0)
+store := accounts.NewMemoryStore()
+_ = store.Upsert(context.Background(), acctA)
+
+usageSrv := stubStaticServer(t, 401, otherBody)
+var warnBuf bytes.Buffer
+c := buildClient(t, usageSrv, noRefreshServer(t), nil, store, noLookupCall(t), &warnBuf, nil)
+
+results, err := c.FetchForSwitch(context.Background())
+if err != nil {
+t.Fatal(err)
+}
+if len(results) != 0 {
+t.Errorf("expected 0 results, got %d", len(results))
+}
+warn := warnBuf.String()
+if !strings.Contains(warn, "`aistat usage`") {
+t.Errorf("non-token_revoked body should keep `aistat usage` hint: %q", warn)
+}
+}
+
+// ── PostSwitchVerify real-impl test (Step 5 / A3#1) ───────────────────────────
+
+// TestCodexPostSwitchVerify_RealImplWrapsErrAuthDenied exercises the real Codex
+// PostSwitchVerify against a live httptest.Server returning 401 token_revoked.
+// This guards the load-bearing %w wrap and bare-phrase contracts; stub-based
+// switch_test.go cases cannot catch a future implementer who omits %w.
+func TestCodexPostSwitchVerify_RealImplWrapsErrAuthDenied(t *testing.T) {
+revokedBody := []byte(`{"error":{"code":"token_revoked","message":"Encountered invalidated oauth token for user"}}`)
+usageSrv := stubStaticServer(t, 401, revokedBody)
+
+target := makeCodexAccount("uuid-target", "target@example.com", "tok-target", "ref-target", 0)
+c := buildClient(t, usageSrv, noRefreshServer(t), nil, nil, noLookupCall(t), nil, nil)
+
+err := c.PostSwitchVerify(context.Background(), target)
+if err == nil {
+t.Fatal("expected error, got nil")
+}
+if !errors.Is(err, providers.ErrAuthDenied) {
+t.Errorf("expected errors.Is(err, ErrAuthDenied) = true; err = %v", err)
+}
+if !strings.Contains(err.Error(), msgTokensRevoked) {
+t.Errorf("err.Error() should contain msgTokensRevoked: %q", err.Error())
+}
+if strings.HasPrefix(err.Error(), "aistat: codex:") {
+t.Errorf("PostSwitchVerify must return bare phrase (no 'aistat: codex:' prefix): %q", err.Error())
+}
+}

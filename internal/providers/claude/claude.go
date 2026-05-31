@@ -531,3 +531,6 @@ func (c *Client) FetchForSwitch(ctx context.Context) ([]providers.AccountResult,
 
 	return results, nil
 }
+
+// PostSwitchVerify is a no-op for Claude — Claude has no post-switch failure modes that need a courtesy check.
+func (c *Client) PostSwitchVerify(_ context.Context, _ accounts.Account) error { return nil }

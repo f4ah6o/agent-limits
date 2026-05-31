@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -15,9 +16,10 @@ import (
 
 // stubSwitchClient implements switchable for tests.
 type stubSwitchClient struct {
-	fetchResults    []providers.AccountResult
-	fetchErr        error
-	reconcileCalled bool
+	fetchResults       []providers.AccountResult
+	fetchErr           error
+	reconcileCalled    bool
+	postSwitchVerifyFn func(context.Context, accounts.Account) error
 }
 
 func (s *stubSwitchClient) FetchForSwitch(_ context.Context) ([]providers.AccountResult, error) {
@@ -26,6 +28,13 @@ func (s *stubSwitchClient) FetchForSwitch(_ context.Context) ([]providers.Accoun
 
 func (s *stubSwitchClient) ReconcileAndPersist(_ context.Context) error {
 	s.reconcileCalled = true
+	return nil
+}
+
+func (s *stubSwitchClient) PostSwitchVerify(ctx context.Context, target accounts.Account) error {
+	if s.postSwitchVerifyFn != nil {
+		return s.postSwitchVerifyFn(ctx, target)
+	}
 	return nil
 }
 
@@ -536,5 +545,100 @@ func TestSwitch_StoreListFailure(t *testing.T) {
 	}
 	if !strings.Contains(r.stderr, "aistat: claude: could not list accounts: disk I/O error") {
 		t.Errorf("wrong error: %q", r.stderr)
+	}
+}
+
+// ---- PostSwitchVerify tests (all use Codex scaffold per B4#2) ----
+
+// scaffoldCodexSwitch sets up the Codex scaffold for PostSwitchVerify tests:
+// two accounts ("alice" active-other, "bob" active), active = bob, --to alice.
+// Returns the stub so callers can set postSwitchVerifyFn before calling runSwitchTest.
+func scaffoldCodexSwitch(t *testing.T) *stubCodexSwitchClient {
+	t.Helper()
+	now := time.Now()
+	ms := withCodexMemoryStore(t)
+	seedCodexAccount(t, ms, "uuid-alice", "alice@example.com", "plan", now.Add(-1*time.Hour))
+	seedCodexAccount(t, ms, "uuid-bob", "bob@example.com", "plan", now.Add(-2*time.Hour))
+	withCodexActiveUUID(t, "uuid-bob")
+	withMemoryStore(t) // empty Claude store — must not be touched
+	stub := &stubCodexSwitchClient{}
+	withCodexSwitchClient(t, stub)
+	withCodexWriteBlob(t)
+	return stub
+}
+
+// TestSwitch_PostSwitchVerifyAuthDeniedWarns verifies that a PostSwitchVerify
+// returning ErrAuthDenied causes a warning on stderr but exit 0.
+func TestSwitch_PostSwitchVerifyAuthDeniedWarns(t *testing.T) {
+	stub := scaffoldCodexSwitch(t)
+	stub.postSwitchVerifyFn = func(_ context.Context, _ accounts.Account) error {
+		return fmt.Errorf("alice@example.com: tokens revoked by upstream...: %w", providers.ErrAuthDenied)
+	}
+
+	r := runSwitchTest("codex", "--to", "alice")
+	if r.code != 0 {
+		t.Fatalf("expected exit 0, got %d (stderr: %q)", r.code, r.stderr)
+	}
+	if !strings.Contains(r.stdout, "switched to") {
+		t.Errorf("expected 'switched to' in stdout: %q", r.stdout)
+	}
+	wantSubstr := "aistat: codex: switched-to account's tokens are not usable: alice@example.com:"
+	if !strings.Contains(r.stderr, wantSubstr) {
+		t.Errorf("expected %q in stderr: %q", wantSubstr, r.stderr)
+	}
+	if !strings.Contains(r.stderr, "tokens revoked") {
+		t.Errorf("expected 'tokens revoked' in stderr: %q", r.stderr)
+	}
+	if strings.Count(r.stderr, "aistat: codex:") != 1 {
+		t.Errorf("expected exactly one 'aistat: codex:' in stderr, got %d: %q",
+			strings.Count(r.stderr, "aistat: codex:"), r.stderr)
+	}
+}
+
+// TestSwitch_PostSwitchVerifyTransientSilenced verifies that a transient error
+// from PostSwitchVerify does not produce a warning.
+func TestSwitch_PostSwitchVerifyTransientSilenced(t *testing.T) {
+	stub := scaffoldCodexSwitch(t)
+	stub.postSwitchVerifyFn = func(_ context.Context, _ accounts.Account) error {
+		return providers.ErrTransient
+	}
+
+	r := runSwitchTest("codex", "--to", "alice")
+	if r.code != 0 {
+		t.Fatalf("expected exit 0, got %d", r.code)
+	}
+	if strings.Contains(r.stderr, "tokens are not usable") {
+		t.Errorf("transient error should be silenced; stderr: %q", r.stderr)
+	}
+}
+
+// TestSwitch_PostSwitchVerifyNilNoWarn verifies that a nil error from PostSwitchVerify
+// produces no warning.
+func TestSwitch_PostSwitchVerifyNilNoWarn(t *testing.T) {
+	scaffoldCodexSwitch(t) // postSwitchVerifyFn unset → returns nil
+
+	r := runSwitchTest("codex", "--to", "alice")
+	if r.code != 0 {
+		t.Fatalf("expected exit 0, got %d", r.code)
+	}
+	if strings.Contains(r.stderr, "tokens are not usable") {
+		t.Errorf("nil verify should produce no warning; stderr: %q", r.stderr)
+	}
+}
+
+// TestSwitch_PostSwitchVerifyNonWrappingErrorSilenced is a regression pin for A2#1/B2#2:
+// a non-%w-wrapped error is treated as non-auth-denied and silenced (not a warning).
+func TestSwitch_PostSwitchVerifyNonWrappingErrorSilenced(t *testing.T) {
+	stub := scaffoldCodexSwitch(t)
+	stub.postSwitchVerifyFn = func(_ context.Context, _ accounts.Account) error {
+		return errors.New("plain error without ErrAuthDenied wrap")
+	}
+
+	r := runSwitchTest("codex", "--to", "alice")
+	if r.code != 0 {
+		t.Fatalf("expected exit 0, got %d", r.code)
+	}
+	if strings.Contains(r.stderr, "tokens are not usable") {
+		t.Errorf("non-wrapping error should be silenced; stderr: %q", r.stderr)
 	}
 }

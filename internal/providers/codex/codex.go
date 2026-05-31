@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/drogers0/aistat/v2/internal/accounts"
@@ -36,6 +37,11 @@ const (
 	// refreshSkew is the safety margin before ExpiresAt at which a stored
 	// token is considered near-expiry and proactively refreshed.
 	refreshSkew = 30 * time.Second
+
+	// msgTokensRevoked and msgStaleRefresh are tightened, actionable phrases
+	// for the two well-known upstream OAuth failure modes.
+	msgTokensRevoked = "tokens revoked by upstream (likely a `codex login` for another account); run `codex login` to recover"
+	msgStaleRefresh  = "stale refresh token (codex CLI rotated it); retry or run `codex login` to recover"
 )
 
 // Client fetches Codex usage limits, optionally for multiple stored accounts.
@@ -231,6 +237,9 @@ func rotateRawBlob(rawBlob json.RawMessage, tok Token) (json.RawMessage, error) 
 // refreshErrorMessage returns a human-readable description of a refresh error.
 // Uses "codex login" recovery hints (D7).
 func refreshErrorMessage(err error) string {
+	if strings.Contains(err.Error(), "refresh_token already") {
+		return msgStaleRefresh
+	}
 	if errors.Is(err, ErrRefreshRejected) {
 		return "account credential expired (run `codex login` to refresh)"
 	}
@@ -454,6 +463,9 @@ func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 		} else if trans {
 			transientCount++
 		}
+		if errors.Is(fetchErr, providers.ErrAuthDenied) && strings.Contains(fetchErr.Error(), "token_revoked") {
+			ar.Error = fmt.Sprintf("aistat: codex: %s: %s", acct.Email, msgTokensRevoked)
+		}
 		accountResults = append(accountResults, ar)
 	}
 
@@ -518,7 +530,11 @@ func (c *Client) FetchForSwitch(ctx context.Context) ([]providers.AccountResult,
 		limits, fetchErr := c.fetchLimitsCached(poolCtx, StoredAccessToken(acct), acct.UUID)
 		if fetchErr != nil {
 			if errors.Is(fetchErr, providers.ErrAuthDenied) {
-				c.warnf("aistat: codex: %s: stored credential rejected (run `aistat usage` to refresh); excluded from auto-pick\n", acct.Email)
+				hint := "run `aistat usage` to refresh"
+				if strings.Contains(fetchErr.Error(), "token_revoked") {
+					hint = "run `codex login` to recover"
+				}
+				c.warnf("aistat: codex: %s: stored credential rejected (%s); excluded from auto-pick\n", acct.Email, hint)
 			} else {
 				c.warnf("aistat: codex: %s: usage fetch failed (%s); excluded from auto-pick\n", acct.Email, fetchErr)
 			}
@@ -534,4 +550,24 @@ func (c *Client) FetchForSwitch(ctx context.Context) ([]providers.AccountResult,
 	}
 
 	return results, nil
+}
+
+// PostSwitchVerify calls the usage endpoint for target immediately after a
+// switch write to check whether the just-activated tokens are usable.
+// FetchUsage hits the 90 s cache in auto-pick (warm from FetchForSwitch);
+// live HTTP only in the --to path where no FetchForSwitch cache write preceded it.
+// The 5 s deadline bounds the courtesy check on the --to path: a slow/unreachable
+// network produces a transient that the caller silently drops, same as no deadline,
+// but without a ~45 s hang from three full perAccountBudget retry attempts.
+func (c *Client) PostSwitchVerify(ctx context.Context, target accounts.Account) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	_, err := c.FetchUsage(ctx, StoredAccessToken(target), target.UUID)
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, providers.ErrAuthDenied) && strings.Contains(err.Error(), "token_revoked") {
+		return fmt.Errorf("%s: %s: %w", target.Email, msgTokensRevoked, providers.ErrAuthDenied)
+	}
+	return err
 }
