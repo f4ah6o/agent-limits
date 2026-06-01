@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/drogers0/aistat/v2/internal/providers"
+	"github.com/drogers0/aistat/v2/internal/testutil"
 )
 
 func newDoer(t *testing.T, client *http.Client) *Doer {
@@ -86,9 +87,8 @@ func TestGetJSON(t *testing.T) {
 			defer srv.Close()
 			d := newDoer(t, srv.Client())
 			var got struct{ Foo int }
-			if err := d.GetJSON(context.Background(), srv.URL, "tok", 10*time.Second, &got, DefaultClassify); err != nil {
-				t.Fatal(err)
-			}
+			err := d.GetJSON(context.Background(), srv.URL, "tok", 10*time.Second, &got, DefaultClassify)
+			testutil.WantNoErr(t, err)
 			if got.Foo != 42 {
 				t.Errorf("got %v, want 42", got.Foo)
 			}
@@ -102,9 +102,8 @@ func TestGetJSON(t *testing.T) {
 			defer srv.Close()
 			d := newDoer(t, srv.Client())
 			var dst struct{}
-			if err := d.GetJSON(context.Background(), srv.URL, "tok-x", 10*time.Second, &dst, DefaultClassify); err != nil {
-				t.Fatal(err)
-			}
+			err := d.GetJSON(context.Background(), srv.URL, "tok-x", 10*time.Second, &dst, DefaultClassify)
+			testutil.WantNoErr(t, err)
 			if captured.Get("Authorization") != "Bearer tok-x" {
 				t.Errorf("Authorization wrong: %q", captured.Get("Authorization"))
 			}
@@ -129,9 +128,8 @@ func TestGetJSON(t *testing.T) {
 				"Accept":        "application/vnd.github+json",
 			})
 			var dst struct{}
-			if err := d.GetJSON(context.Background(), srv.URL, "tok", 10*time.Second, &dst, DefaultClassify); err != nil {
-				t.Fatal(err)
-			}
+			err := d.GetJSON(context.Background(), srv.URL, "tok", 10*time.Second, &dst, DefaultClassify)
+			testutil.WantNoErr(t, err)
 			if got := captured.Get("Authorization"); got != "Bearer tok" {
 				t.Errorf("Authorization should be untouched, got %q", got)
 			}
@@ -154,9 +152,8 @@ func TestGetJSON(t *testing.T) {
 				"Anthropic-Beta": "oauth-2025-04-20",
 			})
 			var dst struct{}
-			if err := d.GetJSON(context.Background(), srv.URL, "tok", 10*time.Second, &dst, DefaultClassify); err != nil {
-				t.Fatal(err)
-			}
+			err := d.GetJSON(context.Background(), srv.URL, "tok", 10*time.Second, &dst, DefaultClassify)
+			testutil.WantNoErr(t, err)
 			if captured.Get("Accept") != "application/vnd.github+json" {
 				t.Errorf("ExtraHeaders should override Accept: %q", captured.Get("Accept"))
 			}
@@ -263,9 +260,8 @@ func TestGetJSON(t *testing.T) {
 			d.Debug = &buf
 			d.ProviderID = "claude"
 			var dst struct{}
-			if err := d.GetJSON(context.Background(), srv.URL, "tok", 10*time.Second, &dst, DefaultClassify); err != nil {
-				t.Fatal(err)
-			}
+			err := d.GetJSON(context.Background(), srv.URL, "tok", 10*time.Second, &dst, DefaultClassify)
+			testutil.WantNoErr(t, err)
 			out := buf.String()
 			if !strings.Contains(out, "[debug] claude:") {
 				t.Errorf("debug should be prefixed with provider id: %s", out)
@@ -297,9 +293,8 @@ func TestGetJSON(t *testing.T) {
 			d.Debug = &buf
 			d.ProviderID = "test"
 			var dst struct{}
-			if err := d.GetJSON(context.Background(), srv.URL+"/a", "tok", 10*time.Second, &dst, DefaultClassify); err != nil {
-				t.Fatal(err)
-			}
+			err := d.GetJSON(context.Background(), srv.URL+"/a", "tok", 10*time.Second, &dst, DefaultClassify)
+			testutil.WantNoErr(t, err)
 			if captured != "/b" {
 				t.Fatalf("redirect target not followed; captured %q", captured)
 			}
@@ -563,9 +558,8 @@ func TestDo(t *testing.T) {
 			d := newDoer(t, srv.Client())
 			var got struct{ Val int }
 			start := time.Now()
-			if err := d.GetJSON(context.Background(), srv.URL, "tok", 10*time.Second, &got, DefaultClassify); err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			err := d.GetJSON(context.Background(), srv.URL, "tok", 10*time.Second, &got, DefaultClassify)
+			testutil.WantNoErr(t, err)
 			elapsed := time.Since(start)
 
 			if calls.Load() != 2 {
@@ -681,9 +675,8 @@ func TestDo(t *testing.T) {
 
 			d := newDoer(t, srv.Client())
 			var got struct{ Ok bool }
-			if err := d.GetJSON(context.Background(), srv.URL, "tok", 10*time.Second, &got, DefaultClassify); err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			err := d.GetJSON(context.Background(), srv.URL, "tok", 10*time.Second, &got, DefaultClassify)
+			testutil.WantNoErr(t, err)
 			if calls.Load() != 2 {
 				t.Errorf("expected 2 calls, got %d", calls.Load())
 			}
@@ -710,9 +703,8 @@ func TestDo(t *testing.T) {
 			d.Debug = &buf
 			d.ProviderID = "test"
 			var dst struct{}
-			if err := d.GetJSON(context.Background(), srv.URL, "tok", 10*time.Second, &dst, DefaultClassify); err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			err := d.GetJSON(context.Background(), srv.URL, "tok", 10*time.Second, &dst, DefaultClassify)
+			testutil.WantNoErr(t, err)
 			out := buf.String()
 			// One retry log line: "retry 2/3 after ...s (Retry-After: 1)"
 			if !strings.Contains(out, fmt.Sprintf("retry 2/%d", maxAttempts)) {
@@ -815,9 +807,8 @@ func TestPostForm(t *testing.T) {
 			d := newDoer(t, srv.Client())
 			var got struct{ Result int }
 			vals := url.Values{"grant_type": {"refresh_token"}}
-			if err := d.PostForm(context.Background(), srv.URL, vals, 10*time.Second, &got, DefaultClassify); err != nil {
-				t.Fatal(err)
-			}
+			err := d.PostForm(context.Background(), srv.URL, vals, 10*time.Second, &got, DefaultClassify)
+			testutil.WantNoErr(t, err)
 			if gotMethod != http.MethodPost {
 				t.Errorf("method = %q, want POST", gotMethod)
 			}
@@ -840,9 +831,8 @@ func TestPostForm(t *testing.T) {
 			defer srv.Close()
 			d := newDoer(t, srv.Client())
 			var dst struct{}
-			if err := d.PostForm(context.Background(), srv.URL, url.Values{}, 10*time.Second, &dst, DefaultClassify); err != nil {
-				t.Fatal(err)
-			}
+			err := d.PostForm(context.Background(), srv.URL, url.Values{}, 10*time.Second, &dst, DefaultClassify)
+			testutil.WantNoErr(t, err)
 			if got := captured.Get("Authorization"); got != "" {
 				t.Errorf("Authorization should be absent on PostForm, got %q", got)
 			}
@@ -856,9 +846,8 @@ func TestPostForm(t *testing.T) {
 			defer srv.Close()
 			d := newDoer(t, srv.Client())
 			var dst struct{}
-			if err := d.PostForm(context.Background(), srv.URL, url.Values{}, 10*time.Second, &dst, DefaultClassify); err != nil {
-				t.Fatal(err)
-			}
+			err := d.PostForm(context.Background(), srv.URL, url.Values{}, 10*time.Second, &dst, DefaultClassify)
+			testutil.WantNoErr(t, err)
 			if got := captured.Get("User-Agent"); got != "aistat-test/0" {
 				t.Errorf("User-Agent = %q, want aistat-test/0", got)
 			}
@@ -877,9 +866,8 @@ func TestPostForm(t *testing.T) {
 				"User-Agent": "evil-ua",
 			})
 			var dst struct{}
-			if err := d.PostForm(context.Background(), srv.URL, url.Values{}, 10*time.Second, &dst, DefaultClassify); err != nil {
-				t.Fatal(err)
-			}
+			err := d.PostForm(context.Background(), srv.URL, url.Values{}, 10*time.Second, &dst, DefaultClassify)
+			testutil.WantNoErr(t, err)
 			if got := captured.Get("User-Agent"); got != "aistat-test/0" {
 				t.Errorf("User-Agent should be Doer's value, got %q", got)
 			}
@@ -909,9 +897,8 @@ func TestPostForm(t *testing.T) {
 			d := newDoer(t, srv.Client())
 			vals := url.Values{"grant_type": {"refresh_token"}, "token": {"abc123"}}
 			var dst struct{}
-			if err := d.PostForm(context.Background(), srv.URL, vals, 10*time.Second, &dst, DefaultClassify); err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			err := d.PostForm(context.Background(), srv.URL, vals, 10*time.Second, &dst, DefaultClassify)
+			testutil.WantNoErr(t, err)
 			if calls.Load() != 2 {
 				t.Errorf("expected 2 calls, got %d", calls.Load())
 			}

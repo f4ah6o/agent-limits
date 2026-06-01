@@ -11,6 +11,7 @@ import (
 
 	"github.com/drogers0/aistat/v2/internal/accounts"
 	"github.com/drogers0/aistat/v2/internal/providers"
+	"github.com/drogers0/aistat/v2/internal/testutil"
 )
 
 // withCodexMemoryStore swaps openCodexAccountStore for a MemoryStore during the test.
@@ -87,9 +88,7 @@ func seedCodexAccount(t *testing.T, ms *accounts.MemoryStore, uuid, email, plan 
 	t.Helper()
 	rawBlob := []byte(`{"tokens":{"access_token":"ctok-` + uuid + `","refresh_token":"crt-` + uuid + `"}}`)
 	a, err := accounts.NewAccount(rawBlob, uuid, email, email, plan, lastSeen)
-	if err != nil {
-		t.Fatalf("seedCodexAccount: %v", err)
-	}
+	testutil.WantNoErr(t, err)
 	if err := ms.Upsert(context.Background(), a); err != nil {
 		t.Fatalf("seedCodexAccount Upsert: %v", err)
 	}

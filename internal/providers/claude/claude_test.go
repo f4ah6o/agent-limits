@@ -31,20 +31,6 @@ var minUsageBody = []byte(`{"five_hour":{"utilization":50.0,"resets_at":"2027-01
 
 // ── assertion helpers ────────────────────────────────────────────────────────
 
-func wantNoErr(t *testing.T, err error) {
-	t.Helper()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func wantErrIs(t *testing.T, err error, target error) {
-	t.Helper()
-	if !errors.Is(err, target) {
-		t.Fatalf("error = %v, want errors.Is %v", err, target)
-	}
-}
-
 func wantAccounts(t *testing.T, out providers.ProviderOutput, n int) {
 	t.Helper()
 	if len(out.Accounts) != n {
@@ -430,7 +416,7 @@ func TestFetch_auth(t *testing.T) {
 			refreshSrv := testutil.RejectServer(t, "refresh")
 
 			_, err := buildClient(t, usageSrv, profileSrv, refreshSrv, nil, nil, nil, nil).Fetch(context.Background())
-			wantErrIs(t, err, providers.ErrAuthMissing)
+			testutil.WantErrIs(t, err, providers.ErrAuthMissing)
 			if !strings.Contains(err.Error(), cred.ClaudeTokenMissingMessage) {
 				t.Errorf("expected token-missing message, got: %v", err)
 			}
@@ -447,7 +433,7 @@ func TestFetch_auth(t *testing.T) {
 			}
 
 			_, err := c.Fetch(context.Background())
-			wantErrIs(t, err, sentinel)
+			testutil.WantErrIs(t, err, sentinel)
 			if errors.Is(err, providers.ErrAuthMissing) {
 				t.Errorf("generic err should not be classified ErrAuthMissing")
 			}
@@ -473,7 +459,7 @@ func TestFetch_multi_account(t *testing.T) {
 				makeAccount("uuid-b", "beta@example.com", "tok-b", "ref-b", 0),
 			)
 			out, err := runFetch(t, fetchOpts{live: live, store: store})
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			wantAccounts(t, out, 2)
 			// Active first.
 			if !out.Accounts[0].Active {
@@ -502,7 +488,7 @@ func TestFetch_multi_account(t *testing.T) {
 				makeAccount("uuid-a", "alpha@example.com", "tok-a", "ref-a", 0),
 			)
 			out, err := runFetch(t, fetchOpts{store: store})
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			wantAccounts(t, out, 2)
 			if out.Accounts[0].Email >= out.Accounts[1].Email {
 				t.Errorf("accounts not sorted by email: %q >= %q", out.Accounts[0].Email, out.Accounts[1].Email)
@@ -580,7 +566,7 @@ func TestFetch_multi_account(t *testing.T) {
 
 			// live absent → both accounts non-active
 			out, err := runFetch(t, fetchOpts{usage: usageSrv, store: store})
-			wantErrIs(t, err, providers.ErrTransient)
+			testutil.WantErrIs(t, err, providers.ErrTransient)
 			if len(out.Accounts) != 2 {
 				t.Fatalf("partial accounts should still be returned, got %d", len(out.Accounts))
 			}
@@ -614,7 +600,7 @@ func TestFetch_multi_account(t *testing.T) {
 			})
 
 			_, err := runFetch(t, fetchOpts{usage: usageSrv, store: store})
-			wantErrIs(t, err, providers.ErrTransient)
+			testutil.WantErrIs(t, err, providers.ErrTransient)
 		}},
 	}
 	for _, tt := range tests {
@@ -638,7 +624,7 @@ func TestFetch_live(t *testing.T) {
 
 			var warnBuf bytes.Buffer
 			out, err := buildClient(t, usageSrv, profileSrv, refreshSrv, live, nil, &warnBuf, nil).Fetch(context.Background())
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			wantAccounts(t, out, 1)
 			ar := out.Accounts[0]
 			if ar.Email != "(live Claude account)" {
@@ -671,7 +657,7 @@ func TestFetch_live(t *testing.T) {
 
 			var warnBuf bytes.Buffer
 			out, err := buildClient(t, usageSrv, profileSrv, refreshSrv, live, nil, &warnBuf, nil).Fetch(context.Background())
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			wantAccounts(t, out, 1)
 			if out.Accounts[0].Email != "(live Claude account)" {
 				t.Errorf("Email = %q, want fallback email", out.Accounts[0].Email)
@@ -685,7 +671,7 @@ func TestFetch_live(t *testing.T) {
 		{"live absent zero stored", func(t *testing.T) {
 			// Live absent + no stored accounts → ErrAuthMissing.
 			_, err := runFetch(t, fetchOpts{})
-			wantErrIs(t, err, providers.ErrAuthMissing)
+			testutil.WantErrIs(t, err, providers.ErrAuthMissing)
 		}},
 		{"live absent stored present", func(t *testing.T) {
 			// No live credential, stored accounts present
@@ -695,7 +681,7 @@ func TestFetch_live(t *testing.T) {
 				makeAccount("uuid-b", "b@c.com", "tok-b", "ref-b", 0),
 			)
 			out, err := runFetch(t, fetchOpts{store: store})
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			wantAccounts(t, out, 2)
 			for _, ar := range out.Accounts {
 				if ar.Active {
@@ -730,7 +716,7 @@ func TestFetchForSwitch(t *testing.T) {
 			refreshSrv, refreshCount := testutil.CountingServer(t, 200, refreshSuccessBody("at2", "rt2"))
 
 			out, err := buildClient(t, usageSrv, profileSrv, refreshSrv, live, store, nil, nil).FetchForSwitch(context.Background())
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			if len(out) != 1 {
 				t.Fatalf("FetchForSwitch should return 1 non-active account, got %d", len(out))
 			}
@@ -769,7 +755,7 @@ func TestFetchForSwitch(t *testing.T) {
 
 			var warnBuf bytes.Buffer
 			out, err := buildClient(t, usageSrv, profileSrv, refreshSrv, live, store, &warnBuf, nil).FetchForSwitch(context.Background())
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 
 			if len(out) != 0 {
 				t.Errorf("rejected account should be excluded, got %d results", len(out))
@@ -800,7 +786,7 @@ func TestFetchForSwitch(t *testing.T) {
 
 			var warnBuf bytes.Buffer
 			out, err := buildClient(t, usageSrv, profileSrv, refreshSrv, nil, store, &warnBuf, nil).FetchForSwitch(context.Background())
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			if len(out) != 0 {
 				t.Errorf("transient account should be excluded, got %d results", len(out))
 			}
@@ -823,7 +809,7 @@ func TestFetchForSwitch(t *testing.T) {
 
 			_, err := buildClient(t, usageSrv, profileSrv, refreshSrv, live, store,
 				nil, func() time.Time { return testNow }).FetchForSwitch(context.Background())
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 
 			// Refresh must not have been called.
 			if n := refreshCount.Load(); n != 0 {
@@ -863,7 +849,7 @@ func TestFetchForSwitch(t *testing.T) {
 			})
 
 			results, err := c.FetchForSwitch(context.Background())
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			if len(results) != 1 {
 				t.Fatalf("FetchForSwitch returned %d results, want 1", len(results))
 			}
@@ -900,7 +886,7 @@ func TestFetch_persist(t *testing.T) {
 
 			_, err := buildClient(t, usageSrv, profileSrv, refreshSrv, live, store,
 				nil, func() time.Time { return testNow }).Fetch(context.Background())
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 
 			// Verify the store now has AT2/RT2 in the blob.
 			stored, _ := store.List(context.Background())
@@ -933,7 +919,7 @@ func TestFetch_persist(t *testing.T) {
 
 			_, err := buildClient(t, usageSrv, profileSrv, refreshSrv, live, store,
 				nil, func() time.Time { return testNow }).Fetch(context.Background())
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 
 			stored, _ := store.List(context.Background())
 			if len(stored) != 1 {
@@ -975,7 +961,7 @@ func TestFetch_persist(t *testing.T) {
 			refreshSrv := testutil.RejectServer(t, "refresh")
 
 			_, err := buildClient(t, usageSrv, profileSrv, refreshSrv, live, store, nil, nil).Fetch(context.Background())
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			if !upsertedBeforeUsage {
 				t.Error("account should be upserted (step 5) before the first usage fetch")
 			}
@@ -1019,7 +1005,7 @@ func TestFetch_persist(t *testing.T) {
 			})
 
 			_, err := runFetch(t, fetchOpts{usage: usageSrv, store: store})
-			wantErrIs(t, err, providers.ErrTransient)
+			testutil.WantErrIs(t, err, providers.ErrTransient)
 		}},
 		{"refresh transient ErrTransient", func(t *testing.T) {
 			// Single account with near-expiry token, refresh server returns 503 →
@@ -1039,7 +1025,7 @@ func TestFetch_persist(t *testing.T) {
 				store:   store,
 				now:     func() time.Time { return testNow },
 			})
-			wantErrIs(t, err, providers.ErrTransient)
+			testutil.WantErrIs(t, err, providers.ErrTransient)
 		}},
 		{"live unstored usage fetch fails", func(t *testing.T) {
 			// Live credential present, empty store, profile call returns 503 →
@@ -1057,7 +1043,7 @@ func TestFetch_persist(t *testing.T) {
 				live:    live,
 				warn:    &warnBuf,
 			})
-			wantErrIs(t, err, providers.ErrTransient)
+			testutil.WantErrIs(t, err, providers.ErrTransient)
 			wantWarn(t, &warnBuf, "live row without storing")
 		}},
 		{"auth denied only nil error", func(t *testing.T) {
@@ -1113,7 +1099,7 @@ func TestFetch_cache(t *testing.T) {
 			})
 
 			out, err := c.Fetch(context.Background())
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			if n := usageCount.Load(); n != 1 {
 				t.Errorf("usage server requests = %d, want 1 (only acctB should fire)", n)
 			}
@@ -1151,7 +1137,7 @@ func TestFetch_cache(t *testing.T) {
 			now = now.Add(2 * time.Second)
 
 			out, err := c.Fetch(context.Background())
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			if n := usageCount.Load(); n != 2 {
 				t.Errorf("usage server requests = %d, want 2 (both entries expired)", n)
 			}
@@ -1184,7 +1170,7 @@ func TestFetch_cache(t *testing.T) {
 			now = now.Add(40 * time.Second)
 
 			out, err := c.Fetch(context.Background())
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			if usageCount.Load() != 0 {
 				t.Errorf("usage server should not be hit on cache hit, got %d requests", usageCount.Load())
 			}
@@ -1220,7 +1206,7 @@ func TestFetch_cache(t *testing.T) {
 			c.cache.Put("some-uuid", map[string]providers.Limit{"five_hour": {ResetAfterSeconds: 999}})
 
 			out, err := c.Fetch(context.Background())
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			if usageCount.Load() != 1 {
 				t.Errorf("usage server requests = %d, want 1 (fresh fetch required, no UUID)", usageCount.Load())
 			}
@@ -1250,7 +1236,7 @@ func TestFetch_cache(t *testing.T) {
 			})
 
 			out, err := c.Fetch(context.Background())
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			// Token was rotated (refresh fired) but UUID is unchanged → cache hit.
 			if n := usageCount.Load(); n != 0 {
 				t.Errorf("usage server requests = %d, want 0 (cache hit despite token rotation)", n)
@@ -1352,7 +1338,7 @@ func TestFetch_cache(t *testing.T) {
 			out, err := c.Fetch(context.Background())
 			elapsed := time.Since(start)
 
-			wantErrIs(t, err, providers.ErrTransient)
+			testutil.WantErrIs(t, err, providers.ErrTransient)
 			if n := callCount.Load(); n != 2 {
 				t.Errorf("usage server calls = %d, want 2 (second sleep skipped by budget check)", n)
 			}
@@ -1390,7 +1376,7 @@ func TestFetchUsage_cache(t *testing.T) {
 			})
 
 			limits, err := c.FetchUsage(context.Background(), "tok-test", "uuid-x")
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			if n := usageCount.Load(); n != 0 {
 				t.Errorf("usage server requests = %d, want 0 (FetchUsage should serve from cache)", n)
 			}
@@ -1408,7 +1394,7 @@ func TestFetchUsage_cache(t *testing.T) {
 			c := buildClient(t, usageSrv, profileSrv, refreshSrv, nil, nil, nil, nil)
 
 			_, err := c.FetchUsage(context.Background(), "tok-test", "")
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			if n := usageCount.Load(); n != 1 {
 				t.Errorf("usage server requests = %d, want 1 (empty uuid forces fresh fetch)", n)
 			}
@@ -1453,7 +1439,7 @@ func TestNew(t *testing.T) {
 			c.cacheBypass = true
 
 			out, err := c.Fetch(context.Background())
-			wantNoErr(t, err)
+			testutil.WantNoErr(t, err)
 			// Bypass skips read → usage server must be hit.
 			if n := usageCount.Load(); n != 1 {
 				t.Errorf("usage server requests = %d, want 1 (bypass skips cache read)", n)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/drogers0/aistat/v2/internal/httpx"
 	"github.com/drogers0/aistat/v2/internal/providers"
+	"github.com/drogers0/aistat/v2/internal/testutil"
 )
 
 type stubProvider struct {
@@ -202,16 +203,12 @@ func TestRun(t *testing.T) {
 			report, _ := Run(context.Background(), []string{"claude", "codex"}, []providers.Provider{emptySuccess, failure}, Options{})
 
 			b, err := json.Marshal(report.Providers["claude"])
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.WantNoErr(t, err)
 			if got := string(b); got != `{"limits":{}}` {
 				t.Errorf("success-with-empty shape wrong, got %s", got)
 			}
 			b, err = json.Marshal(report.Providers["codex"])
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.WantNoErr(t, err)
 			got := string(b)
 			if !strings.Contains(got, `"limits":null`) {
 				t.Errorf("failure should serialize limits as null, got %s", got)

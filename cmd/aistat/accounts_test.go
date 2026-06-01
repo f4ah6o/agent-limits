@@ -48,9 +48,7 @@ func seedAccount(t *testing.T, ms *accounts.MemoryStore, uuid, email, plan strin
 		"claudeAiOauth": map[string]any{"accessToken": "tok-" + uuid, "refreshToken": "rt-" + uuid},
 	})
 	a, err := accounts.NewAccount(rawBlob, uuid, email, email, plan, lastSeen)
-	if err != nil {
-		t.Fatalf("seedAccount: %v", err)
-	}
+	testutil.WantNoErr(t, err)
 	if err := ms.Upsert(context.Background(), a); err != nil {
 		t.Fatalf("seedAccount Upsert: %v", err)
 	}

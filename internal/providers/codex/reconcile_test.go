@@ -10,6 +10,7 @@ import (
 
 	"github.com/drogers0/aistat/v2/internal/accounts"
 	"github.com/drogers0/aistat/v2/internal/cred"
+	"github.com/drogers0/aistat/v2/internal/testutil"
 )
 
 // ── fixtures ─────────────────────────────────────────────────────────────────
@@ -414,9 +415,7 @@ func TestResolveActiveUUID(t *testing.T) {
 				Now:      testNow,
 			})
 
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if uuid != "uuid-1" {
 				t.Errorf("uuid = %q, want %q", uuid, "uuid-1")
 			}
@@ -435,9 +434,7 @@ func TestResolveActiveUUID(t *testing.T) {
 				Now:      testNow,
 			})
 
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if uuid != "uuid-from-lookup" {
 				t.Errorf("uuid = %q, want %q", uuid, "uuid-from-lookup")
 			}

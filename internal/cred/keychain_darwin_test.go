@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"slices"
 	"testing"
+
+	"github.com/drogers0/aistat/v2/internal/testutil"
 )
 
 // TestWriteClaudeLiveBlob verifies the seam-based and live keychain write paths.
@@ -46,9 +48,7 @@ func TestWriteClaudeLiveBlob(t *testing.T) {
 				return nil, nil
 			}
 
-			if err := WriteClaudeLiveBlob(context.Background(), blob); err != nil {
-				t.Fatalf("WriteClaudeLiveBlob: %v", err)
-			}
+			testutil.WantNoErr(t, WriteClaudeLiveBlob(context.Background(), blob))
 
 			if len(calls) != 1 {
 				t.Fatalf("expected 1 security call, got %d", len(calls))
@@ -106,14 +106,10 @@ func TestWriteClaudeLiveBlob(t *testing.T) {
 			})
 
 			sentinel := []byte(`{"claudeAiOauth":{"accessToken":"aistat-live-test-sentinel","refreshToken":"","expiresAt":0}}`)
-			if err := WriteClaudeLiveBlob(ctx, sentinel); err != nil {
-				t.Fatalf("WriteClaudeLiveBlob: %v", err)
-			}
+			testutil.WantNoErr(t, WriteClaudeLiveBlob(ctx, sentinel))
 
 			got, err := ReadClaudeCredential(ctx)
-			if err != nil {
-				t.Fatalf("ReadClaudeCredential after write: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if got.AccessToken != "aistat-live-test-sentinel" {
 				t.Errorf("AccessToken: got %q, want %q", got.AccessToken, "aistat-live-test-sentinel")
 			}
@@ -142,9 +138,7 @@ func TestReadClaudeCredential(t *testing.T) {
 			}
 
 			c, err := ReadClaudeCredential(context.Background())
-			if err != nil {
-				t.Fatalf("ReadClaudeCredential: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if c.AccessToken != "seam-tok" {
 				t.Errorf("AccessToken: got %q, want %q", c.AccessToken, "seam-tok")
 			}
@@ -172,9 +166,7 @@ func TestReadClaudeCredential(t *testing.T) {
 			}
 
 			c, err := ReadClaudeCredential(context.Background())
-			if err != nil {
-				t.Fatalf("ReadClaudeCredential: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if !bytes.Equal(c.Raw, payload) {
 				t.Errorf("Raw should not contain trailing newline\ngot:  %q\nwant: %q", c.Raw, payload)
 			}
@@ -195,9 +187,7 @@ func TestReadClaudeCredential(t *testing.T) {
 			}
 
 			c, err := ReadClaudeCredential(context.Background())
-			if err != nil {
-				t.Fatalf("ReadClaudeCredential: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if !bytes.Equal(c.Raw, payloadWithNL) {
 				t.Errorf("Raw should preserve payload-internal newline\ngot:  %q\nwant: %q", c.Raw, payloadWithNL)
 			}

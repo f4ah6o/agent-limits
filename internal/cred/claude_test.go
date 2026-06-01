@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/drogers0/aistat/v2/internal/testutil"
 )
 
 func TestParseClaudeCred(t *testing.T) {
@@ -14,9 +16,7 @@ func TestParseClaudeCred(t *testing.T) {
 	}{
 		{"happy path", func(t *testing.T) {
 			got, err := parseClaudeCred([]byte(`{"claudeAiOauth":{"accessToken":"sk-ant-oat01-abc"}}`))
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if got != "sk-ant-oat01-abc" {
 				t.Errorf("got %q, want %q", got, "sk-ant-oat01-abc")
 			}
@@ -59,9 +59,7 @@ func TestParseClaudeCredFull(t *testing.T) {
 		{"happy path", func(t *testing.T) {
 			input := []byte(`{"claudeAiOauth":{"accessToken":"sk-ant-oat01-abc","refreshToken":"rt-xyz","expiresAt":1234567890}}`)
 			c, err := parseClaudeCredFull(input)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if c.AccessToken != "sk-ant-oat01-abc" {
 				t.Errorf("AccessToken: got %q, want %q", c.AccessToken, "sk-ant-oat01-abc")
 			}
@@ -79,9 +77,7 @@ func TestParseClaudeCredFull(t *testing.T) {
 			// Include whitespace and extra fields to confirm byte-exact preservation.
 			input := []byte(`{ "claudeAiOauth": { "accessToken": "tok",  "expiresAt": 42 }, "organizationUuid": "org-1" }`)
 			c, err := parseClaudeCredFull(input)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if !bytes.Equal(c.Raw, input) {
 				t.Errorf("Raw not equal to input\ngot:  %q\nwant: %q", c.Raw, input)
 			}
@@ -90,9 +86,7 @@ func TestParseClaudeCredFull(t *testing.T) {
 			// Mutating the original buffer must not affect Credential.Raw.
 			input := []byte(`{"claudeAiOauth":{"accessToken":"tok"}}`)
 			c, err := parseClaudeCredFull(input)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			original := string(c.Raw)
 			input[0] = 'X' // mutate original
 			if string(c.Raw) != original {
@@ -107,18 +101,14 @@ func TestParseClaudeCredFull(t *testing.T) {
 		}},
 		{"missing refresh token", func(t *testing.T) {
 			c, err := parseClaudeCredFull([]byte(`{"claudeAiOauth":{"accessToken":"tok"}}`))
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if c.RefreshToken != "" {
 				t.Errorf("expected empty RefreshToken, got %q", c.RefreshToken)
 			}
 		}},
 		{"missing expires at", func(t *testing.T) {
 			c, err := parseClaudeCredFull([]byte(`{"claudeAiOauth":{"accessToken":"tok","refreshToken":"rt"}}`))
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if c.ExpiresAt != 0 {
 				t.Errorf("expected zero ExpiresAt, got %d", c.ExpiresAt)
 			}

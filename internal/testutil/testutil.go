@@ -4,10 +4,12 @@ package testutil
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -70,6 +72,31 @@ func RejectServer(t *testing.T, role string) *httptest.Server {
 	}))
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+// WantNoErr fails the test (Fatalf) if err is non-nil.
+func WantNoErr(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// WantErrIs fails the test (Fatalf) unless errors.Is(err, target).
+func WantErrIs(t *testing.T, err error, target error) {
+	t.Helper()
+	if !errors.Is(err, target) {
+		t.Fatalf("error = %v, want errors.Is %v", err, target)
+	}
+}
+
+// WantErrContains fails the test (Fatalf) unless err is non-nil and its message
+// contains sub.
+func WantErrContains(t *testing.T, err error, sub string) {
+	t.Helper()
+	if err == nil || !strings.Contains(err.Error(), sub) {
+		t.Fatalf("error = %v, want contains %q", err, sub)
+	}
 }
 
 // MemStore returns an accounts.MemoryStore pre-populated with accts (in order).

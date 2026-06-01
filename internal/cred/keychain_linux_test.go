@@ -9,18 +9,16 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/drogers0/aistat/v2/internal/testutil"
 )
 
 func writeCred(t *testing.T, dir, body string) string {
 	t.Helper()
 	claudeDir := filepath.Join(dir, ".claude")
-	if err := os.MkdirAll(claudeDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	testutil.WantNoErr(t, os.MkdirAll(claudeDir, 0o700))
 	path := filepath.Join(claudeDir, ".credentials.json")
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testutil.WantNoErr(t, os.WriteFile(path, []byte(body), 0o600))
 	return path
 }
 
@@ -34,9 +32,7 @@ func TestReadClaudeToken(t *testing.T) {
 			t.Setenv("HOME", dir)
 			writeCred(t, dir, `{"claudeAiOauth":{"accessToken":"sk-ant-oat01-abc"}}`)
 			got, err := ReadClaudeToken(context.Background())
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if got != "sk-ant-oat01-abc" {
 				t.Errorf("got %q, want %q", got, "sk-ant-oat01-abc")
 			}
@@ -84,13 +80,9 @@ func TestWriteClaudeLiveBlob(t *testing.T) {
 			dir := t.TempDir()
 			t.Setenv("HOME", dir)
 			blob := []byte(`{"claudeAiOauth":{"accessToken":"sk-ant-write-test","refreshToken":"rt","expiresAt":9999}}`)
-			if err := WriteClaudeLiveBlob(context.Background(), blob); err != nil {
-				t.Fatalf("WriteClaudeLiveBlob: %v", err)
-			}
+			testutil.WantNoErr(t, WriteClaudeLiveBlob(context.Background(), blob))
 			c, err := ReadClaudeCredential(context.Background())
-			if err != nil {
-				t.Fatalf("ReadClaudeCredential: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if !bytes.Equal(c.Raw, blob) {
 				t.Errorf("read-back bytes differ\ngot:  %q\nwant: %q", c.Raw, blob)
 			}
@@ -102,14 +94,10 @@ func TestWriteClaudeLiveBlob(t *testing.T) {
 			dir := t.TempDir()
 			t.Setenv("HOME", dir)
 			blob := []byte(`{"claudeAiOauth":{"accessToken":"tok"}}`)
-			if err := WriteClaudeLiveBlob(context.Background(), blob); err != nil {
-				t.Fatalf("WriteClaudeLiveBlob: %v", err)
-			}
+			testutil.WantNoErr(t, WriteClaudeLiveBlob(context.Background(), blob))
 			path := filepath.Join(dir, ".claude", ".credentials.json")
 			info, err := os.Stat(path)
-			if err != nil {
-				t.Fatalf("stat: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if got := info.Mode().Perm(); got != 0o600 {
 				t.Errorf("file mode: got %04o, want 0600", got)
 			}
@@ -119,14 +107,10 @@ func TestWriteClaudeLiveBlob(t *testing.T) {
 			t.Setenv("HOME", dir)
 			// Do not pre-create ~/.claude; WriteClaudeLiveBlob must create it.
 			blob := []byte(`{"claudeAiOauth":{"accessToken":"tok"}}`)
-			if err := WriteClaudeLiveBlob(context.Background(), blob); err != nil {
-				t.Fatalf("WriteClaudeLiveBlob: %v", err)
-			}
+			testutil.WantNoErr(t, WriteClaudeLiveBlob(context.Background(), blob))
 			claudeDir := filepath.Join(dir, ".claude")
 			info, err := os.Stat(claudeDir)
-			if err != nil {
-				t.Fatalf("stat .claude dir: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if !info.IsDir() {
 				t.Error(".claude is not a directory")
 			}
@@ -138,18 +122,12 @@ func TestWriteClaudeLiveBlob(t *testing.T) {
 			dir := t.TempDir()
 			t.Setenv("HOME", dir)
 			claudeDir := filepath.Join(dir, ".claude")
-			if err := os.MkdirAll(claudeDir, 0o700); err != nil {
-				t.Fatal(err)
-			}
+			testutil.WantNoErr(t, os.MkdirAll(claudeDir, 0o700))
 
 			blob := []byte(`{"claudeAiOauth":{"accessToken":"tok"}}`)
-			if err := WriteClaudeLiveBlob(context.Background(), blob); err != nil {
-				t.Fatalf("WriteClaudeLiveBlob: %v", err)
-			}
+			testutil.WantNoErr(t, WriteClaudeLiveBlob(context.Background(), blob))
 			entries, err := os.ReadDir(claudeDir)
-			if err != nil {
-				t.Fatalf("ReadDir: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			for _, e := range entries {
 				if e.Name() != ".credentials.json" {
 					t.Errorf("unexpected file left in .claude dir: %q", e.Name())
@@ -160,16 +138,12 @@ func TestWriteClaudeLiveBlob(t *testing.T) {
 			dir := t.TempDir()
 			t.Setenv("HOME", dir)
 			claudeDir := filepath.Join(dir, ".claude")
-			if err := os.MkdirAll(claudeDir, 0o700); err != nil {
-				t.Fatal(err)
-			}
+			testutil.WantNoErr(t, os.MkdirAll(claudeDir, 0o700))
 
 			// Place the destination path as a directory so os.Rename into it fails.
 			// CreateTemp uses a different name pattern, so it succeeds; only Rename fails.
 			dest := filepath.Join(claudeDir, ".credentials.json")
-			if err := os.Mkdir(dest, 0o700); err != nil {
-				t.Fatal(err)
-			}
+			testutil.WantNoErr(t, os.Mkdir(dest, 0o700))
 
 			blob := []byte(`{"claudeAiOauth":{"accessToken":"tok"}}`)
 			err := WriteClaudeLiveBlob(context.Background(), blob)
@@ -179,9 +153,7 @@ func TestWriteClaudeLiveBlob(t *testing.T) {
 
 			// No temp files should remain.
 			entries, err2 := os.ReadDir(claudeDir)
-			if err2 != nil {
-				t.Fatalf("ReadDir: %v", err2)
-			}
+			testutil.WantNoErr(t, err2)
 			for _, e := range entries {
 				if e.Name() != ".credentials.json" {
 					t.Errorf("tmp file not cleaned up: %q", e.Name())

@@ -2,7 +2,6 @@ package claude
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -11,6 +10,7 @@ import (
 	"github.com/drogers0/aistat/v2/internal/accounts"
 	"github.com/drogers0/aistat/v2/internal/cred"
 	"github.com/drogers0/aistat/v2/internal/providers"
+	"github.com/drogers0/aistat/v2/internal/testutil"
 )
 
 // ── fixtures ────────────────────────────────────────────────────────────────
@@ -487,9 +487,7 @@ func TestResolveActiveUUID(t *testing.T) {
 				Now:           testNow,
 			})
 
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if uuid != "uuid-1" {
 				t.Errorf("uuid = %q, want %q", uuid, "uuid-1")
 			}
@@ -511,9 +509,7 @@ func TestResolveActiveUUID(t *testing.T) {
 				Now:           testNow,
 			})
 
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if uuid != "uuid-from-profile" {
 				t.Errorf("uuid = %q, want %q", uuid, "uuid-from-profile")
 			}
@@ -559,9 +555,7 @@ func TestResolveActiveUUID(t *testing.T) {
 				Now:           testNow,
 			})
 
-			if !errors.Is(err, providers.ErrTransient) {
-				t.Errorf("expected ErrTransient, got: %v", err)
-			}
+			testutil.WantErrIs(t, err, providers.ErrTransient)
 			if uuid != "" {
 				t.Errorf("uuid = %q, want empty on error", uuid)
 			}

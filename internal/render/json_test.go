@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/drogers0/aistat/v2/internal/providers"
+	"github.com/drogers0/aistat/v2/internal/testutil"
 )
 
 func TestJSON(t *testing.T) {
@@ -45,9 +46,7 @@ func TestJSON(t *testing.T) {
 				},
 			}
 			var buf bytes.Buffer
-			if err := JSON(&buf, r); err != nil {
-				t.Fatal(err)
-			}
+			testutil.WantNoErr(t, JSON(&buf, r))
 			got := buf.String()
 			if !strings.Contains(got, `"checked_at": "2026-05-26T20:00:00+00:00"`) {
 				t.Fatalf("checked_at format wrong: %s", got)

@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/drogers0/aistat/v2/internal/testutil"
 )
 
 // makeTestJWT creates a minimal JWT (header.payload.sig) from the given JSON payload.
@@ -25,12 +27,8 @@ func writeAuth(t *testing.T, body string) string {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	dir := filepath.Join(home, ".codex")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "auth.json"), []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testutil.WantNoErr(t, os.MkdirAll(dir, 0o700))
+	testutil.WantNoErr(t, os.WriteFile(filepath.Join(dir, "auth.json"), []byte(body), 0o600))
 	return home
 }
 
@@ -42,9 +40,7 @@ func TestReadCodexToken(t *testing.T) {
 		{"happy path", func(t *testing.T) {
 			writeAuth(t, `{"tokens":{"access_token":"tok-abc"}}`)
 			got, err := ReadCodexToken(context.Background())
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if got != "tok-abc" {
 				t.Errorf("token = %q, want tok-abc", got)
 			}
@@ -79,9 +75,7 @@ func TestReadCodexToken(t *testing.T) {
 		{"still works after credential read", func(t *testing.T) {
 			writeAuth(t, `{"tokens":{"access_token":"my-token"}}`)
 			got, err := ReadCodexToken(context.Background())
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if got != "my-token" {
 				t.Errorf("token = %q, want my-token", got)
 			}
@@ -102,9 +96,7 @@ func TestParseCodexIDToken(t *testing.T) {
 		{"happy path", func(t *testing.T) {
 			jwt := makeTestJWT(t, `{"sub":"u1","email":"user@example.com","exp":1700000000}`)
 			sub, email, expSec, err := ParseCodexIDToken(jwt)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if sub != "u1" {
 				t.Errorf("sub = %q, want u1", sub)
 			}
@@ -118,9 +110,7 @@ func TestParseCodexIDToken(t *testing.T) {
 		{"no email", func(t *testing.T) {
 			jwt := makeTestJWT(t, `{"sub":"u2","exp":1700000000}`)
 			sub, email, expSec, err := ParseCodexIDToken(jwt)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if sub != "u2" {
 				t.Errorf("sub = %q, want u2", sub)
 			}
@@ -134,9 +124,7 @@ func TestParseCodexIDToken(t *testing.T) {
 		{"no exp", func(t *testing.T) {
 			jwt := makeTestJWT(t, `{"sub":"u3"}`)
 			sub, _, expSec, err := ParseCodexIDToken(jwt)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if sub != "u3" {
 				t.Errorf("sub = %q, want u3", sub)
 			}
@@ -218,9 +206,7 @@ func TestReadCodexCredential(t *testing.T) {
 			body := `{"tokens":{"access_token":"tok","refresh_token":"ref","id_token":"` + testIDToken + `"}}`
 			writeAuth(t, body)
 			cred, err := ReadCodexCredential(context.Background())
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if cred.AccessToken != "tok" {
 				t.Errorf("AccessToken = %q, want tok", cred.AccessToken)
 			}
@@ -237,9 +223,7 @@ func TestReadCodexCredential(t *testing.T) {
 		{"no id token", func(t *testing.T) {
 			writeAuth(t, `{"tokens":{"access_token":"tok","refresh_token":"ref"}}`)
 			cred, err := ReadCodexCredential(context.Background())
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if cred.ExpiresAt != 0 {
 				t.Errorf("ExpiresAt = %d, want 0 when id_token absent", cred.ExpiresAt)
 			}
@@ -275,9 +259,7 @@ func TestReadCodexCredential(t *testing.T) {
 			body := `{"tokens":{"access_token":"tok"},"extra_field":"preserved"}`
 			writeAuth(t, body)
 			cred, err := ReadCodexCredential(context.Background())
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if !bytes.Equal(cred.Raw, []byte(body)) {
 				t.Errorf("Raw = %q, want %q", cred.Raw, body)
 			}
@@ -286,9 +268,7 @@ func TestReadCodexCredential(t *testing.T) {
 			// D4: malformed-but-present id_token sets ExpiresAt=0 without error.
 			writeAuth(t, `{"tokens":{"access_token":"tok","id_token":"not.a.valid.jwt.at.all"}}`)
 			cred, err := ReadCodexCredential(context.Background())
-			if err != nil {
-				t.Fatalf("unexpected error: malformed id_token must not cause ReadCodexCredential to fail: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if cred.ExpiresAt != 0 {
 				t.Errorf("ExpiresAt = %d, want 0 for malformed id_token", cred.ExpiresAt)
 			}
@@ -321,25 +301,17 @@ func TestWriteCodexLiveBlob(t *testing.T) {
 			home := t.TempDir()
 			t.Setenv("HOME", home)
 			// Pre-create the .codex dir so we can confirm mode on write.
-			if err := os.MkdirAll(filepath.Join(home, ".codex"), 0o700); err != nil {
-				t.Fatal(err)
-			}
+			testutil.WantNoErr(t, os.MkdirAll(filepath.Join(home, ".codex"), 0o700))
 			data := []byte(`{"tokens":{"access_token":"written"}}`)
-			if err := WriteCodexLiveBlob(context.Background(), data); err != nil {
-				t.Fatalf("WriteCodexLiveBlob: %v", err)
-			}
+			testutil.WantNoErr(t, WriteCodexLiveBlob(context.Background(), data))
 			path := filepath.Join(home, ".codex", "auth.json")
 			got, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("ReadFile: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if !bytes.Equal(got, data) {
 				t.Errorf("content = %q, want %q", got, data)
 			}
 			info, err := os.Stat(path)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.WantNoErr(t, err)
 			if perm := info.Mode().Perm(); perm != 0o600 {
 				t.Errorf("mode = %o, want 0600", perm)
 			}
@@ -349,13 +321,9 @@ func TestWriteCodexLiveBlob(t *testing.T) {
 			t.Setenv("HOME", home)
 			// Do NOT pre-create .codex dir.
 			data := []byte(`{"tokens":{"access_token":"new"}}`)
-			if err := WriteCodexLiveBlob(context.Background(), data); err != nil {
-				t.Fatalf("WriteCodexLiveBlob: %v", err)
-			}
+			testutil.WantNoErr(t, WriteCodexLiveBlob(context.Background(), data))
 			got, err := os.ReadFile(filepath.Join(home, ".codex", "auth.json"))
-			if err != nil {
-				t.Fatalf("ReadFile: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if !bytes.Equal(got, data) {
 				t.Errorf("content = %q, want %q", got, data)
 			}
@@ -364,16 +332,10 @@ func TestWriteCodexLiveBlob(t *testing.T) {
 			home := t.TempDir()
 			t.Setenv("HOME", home)
 			dir := filepath.Join(home, ".codex")
-			if err := os.MkdirAll(dir, 0o700); err != nil {
-				t.Fatal(err)
-			}
-			if err := WriteCodexLiveBlob(context.Background(), []byte(`{"tokens":{"access_token":"x"}}`)); err != nil {
-				t.Fatalf("WriteCodexLiveBlob: %v", err)
-			}
+			testutil.WantNoErr(t, os.MkdirAll(dir, 0o700))
+			testutil.WantNoErr(t, WriteCodexLiveBlob(context.Background(), []byte(`{"tokens":{"access_token":"x"}}`)))
 			matches, err := filepath.Glob(filepath.Join(dir, ".auth-*.json"))
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.WantNoErr(t, err)
 			if len(matches) != 0 {
 				t.Errorf("temp files left behind: %v", matches)
 			}
@@ -383,16 +345,10 @@ func TestWriteCodexLiveBlob(t *testing.T) {
 			t.Setenv("HOME", home)
 			first := []byte(`{"tokens":{"access_token":"first"}}`)
 			second := []byte(`{"tokens":{"access_token":"second"}}`)
-			if err := WriteCodexLiveBlob(context.Background(), first); err != nil {
-				t.Fatal(err)
-			}
-			if err := WriteCodexLiveBlob(context.Background(), second); err != nil {
-				t.Fatal(err)
-			}
+			testutil.WantNoErr(t, WriteCodexLiveBlob(context.Background(), first))
+			testutil.WantNoErr(t, WriteCodexLiveBlob(context.Background(), second))
 			got, err := os.ReadFile(filepath.Join(home, ".codex", "auth.json"))
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.WantNoErr(t, err)
 			if !bytes.Equal(got, second) {
 				t.Errorf("content = %q, want second write %q", got, second)
 			}
@@ -401,13 +357,9 @@ func TestWriteCodexLiveBlob(t *testing.T) {
 			home := t.TempDir()
 			t.Setenv("HOME", home)
 			body := `{"tokens":{"access_token":"rt-tok","refresh_token":"rt-ref"}}`
-			if err := WriteCodexLiveBlob(context.Background(), []byte(body)); err != nil {
-				t.Fatal(err)
-			}
+			testutil.WantNoErr(t, WriteCodexLiveBlob(context.Background(), []byte(body)))
 			cred, err := ReadCodexCredential(context.Background())
-			if err != nil {
-				t.Fatalf("ReadCodexCredential after write: %v", err)
-			}
+			testutil.WantNoErr(t, err)
 			if cred.AccessToken != "rt-tok" {
 				t.Errorf("AccessToken = %q, want rt-tok", cred.AccessToken)
 			}

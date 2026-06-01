@@ -9,6 +9,7 @@ import (
 
 	"github.com/drogers0/aistat/v2/internal/providers"
 	"github.com/drogers0/aistat/v2/internal/render"
+	"github.com/drogers0/aistat/v2/internal/testutil"
 )
 
 func TestParity(t *testing.T) {
@@ -54,9 +55,7 @@ func TestParity(t *testing.T) {
 			}
 
 			var buf bytes.Buffer
-			if err := render.JSON(&buf, report); err != nil {
-				t.Fatal(err)
-			}
+			testutil.WantNoErr(t, render.JSON(&buf, report))
 			got := buf.String()
 
 			// 1. checked_at uses "+00:00", not "Z".
@@ -135,10 +134,8 @@ func TestParity(t *testing.T) {
 			)
 
 			var buf bytes.Buffer
-			if err := render.Text(&buf, report, []string{"claude", "codex", "copilot"}); err != nil {
-				t.Fatal(err)
-			}
-			want := "Claude usage\n- 5-hour: 2.0% (resets in 4h 53m)\n- 7-day: 21.0% (resets in 2d 5h)\n- 7-day sonnet: 0.0% (resets in 2d 5h)\n\nCodex usage\n- 5-hour: 0.0% (resets in 3h 12m)\n- 7-day: 11.0% (resets in 4d 1h)\n- Code review 7-day: 0.0% (resets in 4d 1h)\n\nCopilot usage\n- month: 4.0% (resets in 5d 7h)\n"
+			testutil.WantNoErr(t, render.Text(&buf, report, []string{"claude", "codex", "copilot"}))
+			want := string(testutil.LoadFixture(t, "text_contract.golden"))
 			if buf.String() != want {
 				t.Errorf("text contract drift:\ngot:\n%s\nwant:\n%s", buf.String(), want)
 			}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/drogers0/aistat/v2/internal/accounts"
 	"github.com/drogers0/aistat/v2/internal/providers"
+	"github.com/drogers0/aistat/v2/internal/testutil"
 )
 
 // stubSwitchClient implements switchable for tests.
@@ -108,9 +109,7 @@ func makeLimits(fiveHourRemaining float64) map[string]providers.Limit {
 func getAccountFromStore(t *testing.T, ms *accounts.MemoryStore, uuid string) accounts.Account {
 	t.Helper()
 	all, err := ms.List(context.Background())
-	if err != nil {
-		t.Fatalf("getAccountFromStore: List: %v", err)
-	}
+	testutil.WantNoErr(t, err)
 	for _, a := range all {
 		if a.UUID == uuid {
 			return a

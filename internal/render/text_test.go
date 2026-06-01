@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/drogers0/aistat/v2/internal/providers"
+	"github.com/drogers0/aistat/v2/internal/testutil"
 )
 
 func mkLimit(used float64, secs int) providers.Limit {
@@ -67,25 +68,8 @@ func TestText(t *testing.T) {
 				},
 			}
 			var buf bytes.Buffer
-			if err := Text(&buf, r, []string{"claude", "codex", "copilot"}); err != nil {
-				t.Fatal(err)
-			}
-			want := "" +
-				"Claude usage\n" +
-				"- me@personal.com (active) [Max 5x]\n" +
-				"  - 5-hour: 2.0% (resets in 4h 53m)\n" +
-				"  - 7-day: 21.0% (resets in 2d 5h)\n" +
-				"  - 7-day sonnet: 0.0% (resets in 2d 5h)\n" +
-				"- me@work.company.com [Max 20x]\n" +
-				"  - 5-hour: 71.0% (resets in 5m)\n" +
-				"\n" +
-				"Codex usage\n" +
-				"- 5-hour: 0.0% (resets in 3h 12m)\n" +
-				"- 7-day: 11.0% (resets in 4d 1h)\n" +
-				"- Code review 7-day: 0.0% (resets in 4d 1h)\n" +
-				"\n" +
-				"Copilot usage\n" +
-				"- month: 4.0% (resets in 5d 7h)\n"
+			testutil.WantNoErr(t, Text(&buf, r, []string{"claude", "codex", "copilot"}))
+			want := string(testutil.LoadFixture(t, "text-design-sample.golden"))
 			if buf.String() != want {
 				t.Fatalf("got:\n%s\nwant:\n%s", buf.String(), want)
 			}
@@ -107,9 +91,7 @@ func TestText(t *testing.T) {
 		}},
 		{"requested but none in report", func(t *testing.T) {
 			var buf bytes.Buffer
-			if err := Text(&buf, providers.Report{}, []string{"claude"}); err != nil {
-				t.Fatal(err)
-			}
+			testutil.WantNoErr(t, Text(&buf, providers.Report{}, []string{"claude"}))
 			if buf.Len() != 0 {
 				t.Errorf("expected empty output when no requested providers are in report, got %q", buf.String())
 			}
@@ -235,13 +217,7 @@ func TestText(t *testing.T) {
 			}
 			var buf bytes.Buffer
 			_ = Text(&buf, r, []string{"claude"})
-			want := "" +
-				"Claude usage\n" +
-				"- a@work.com (active) [Max 20x]\n" +
-				"  - 5-hour: 10.0% (resets in 1h 0m)\n" +
-				"  - 7-day: 5.0% (resets in 2d 3h)\n" +
-				"- b@personal.com [Max 5x]\n" +
-				"  - 5-hour: 90.0% (resets in 10m)\n"
+			want := string(testutil.LoadFixture(t, "text-claude-accounts-two.golden"))
 			if buf.String() != want {
 				t.Fatalf("got:\n%s\nwant:\n%s", buf.String(), want)
 			}
@@ -364,14 +340,7 @@ func TestText(t *testing.T) {
 			}
 			var buf bytes.Buffer
 			_ = Text(&buf, r, []string{"codex"})
-			want := "" +
-				"Codex usage\n" +
-				"- a@work.com (active)\n" +
-				"  - 5-hour: 10.0% (resets in 1h 0m)\n" +
-				"  - 7-day: 5.0% (resets in 2d 3h)\n" +
-				"- b@personal.com\n" +
-				"  - 7-day: 80.0% (resets in 1d 0h)\n" +
-				"  - Code review 7-day: 2.0% (resets in 4d 1h)\n"
+			want := string(testutil.LoadFixture(t, "text-codex-accounts-two.golden"))
 			if buf.String() != want {
 				t.Fatalf("got:\n%s\nwant:\n%s", buf.String(), want)
 			}

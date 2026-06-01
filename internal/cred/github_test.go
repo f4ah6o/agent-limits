@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"testing"
 	"time"
+
+	"github.com/drogers0/aistat/v2/internal/testutil"
 )
 
 func TestReadGitHubToken(t *testing.T) {
@@ -69,9 +71,7 @@ func TestReadGitHubToken(t *testing.T) {
 		{"preserves exec error chain on missing binary", func(t *testing.T) {
 			t.Setenv("PATH", "") // forces exec.LookPath inside CommandContext to fail
 			_, err := ReadGitHubToken(context.Background())
-			if !errors.Is(err, ErrGitHubTokenNotFound) {
-				t.Fatalf("expected ErrGitHubTokenNotFound, got %v", err)
-			}
+			testutil.WantErrIs(t, err, ErrGitHubTokenNotFound)
 			var pe *exec.Error
 			if !errors.As(err, &pe) {
 				t.Errorf("inner *exec.Error not preserved in chain: %v", err)
