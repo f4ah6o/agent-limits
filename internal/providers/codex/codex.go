@@ -44,6 +44,21 @@ const (
 	msgStaleRefresh  = "stale refresh token (codex CLI rotated it); retry or run `codex login` to recover"
 )
 
+// isRevokedTokenErr reports whether err is an upstream "this token is dead,
+// re-login to recover" signal from the chatgpt.com usage endpoint. OpenAI has
+// returned two interchangeable codes for the same condition (a token invalidated
+// because another account logged in on the same client): "token_revoked" and
+// "token_invalidated". Both map to msgTokensRevoked. The ErrAuthDenied guard
+// scopes this to the usage endpoint; the refresh endpoint's failures are handled
+// separately in refreshErrorMessage.
+func isRevokedTokenErr(err error) bool {
+	if !errors.Is(err, providers.ErrAuthDenied) {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "token_revoked") || strings.Contains(s, "token_invalidated")
+}
+
 // Client fetches Codex usage limits, optionally for multiple stored accounts.
 type Client struct {
 	doer             *httpx.Doer
@@ -237,7 +252,10 @@ func rotateRawBlob(rawBlob json.RawMessage, tok Token) (json.RawMessage, error) 
 // refreshErrorMessage returns a human-readable description of a refresh error.
 // Uses "codex login" recovery hints (D7).
 func refreshErrorMessage(err error) string {
-	if strings.Contains(err.Error(), "refresh_token already") {
+	// Match the real upstream body, e.g. "Your refresh token has already been
+	// used to generate a new access token." (invalid_request_error, not
+	// invalid_grant). The literal "refresh_token already" never appears.
+	if strings.Contains(err.Error(), "already been used") {
 		return msgStaleRefresh
 	}
 	if errors.Is(err, ErrRefreshRejected) {
@@ -426,6 +444,9 @@ func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 		} else if trans {
 			transientCount++
 		}
+		if isRevokedTokenErr(fetchErr) {
+			ar.Error = fmt.Sprintf("aistat: codex: %s: %s", ar.Email, msgTokensRevoked)
+		}
 		accountResults = append(accountResults, ar)
 	}
 
@@ -463,7 +484,7 @@ func (c *Client) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
 		} else if trans {
 			transientCount++
 		}
-		if errors.Is(fetchErr, providers.ErrAuthDenied) && strings.Contains(fetchErr.Error(), "token_revoked") {
+		if isRevokedTokenErr(fetchErr) {
 			ar.Error = fmt.Sprintf("aistat: codex: %s: %s", acct.Email, msgTokensRevoked)
 		}
 		accountResults = append(accountResults, ar)
@@ -531,7 +552,7 @@ func (c *Client) FetchForSwitch(ctx context.Context) ([]providers.AccountResult,
 		if fetchErr != nil {
 			if errors.Is(fetchErr, providers.ErrAuthDenied) {
 				hint := "run `aistat usage` to refresh"
-				if strings.Contains(fetchErr.Error(), "token_revoked") {
+				if isRevokedTokenErr(fetchErr) {
 					hint = "run `codex login` to recover"
 				}
 				c.warnf("aistat: codex: %s: stored credential rejected (%s); excluded from auto-pick\n", acct.Email, hint)
@@ -566,7 +587,7 @@ func (c *Client) PostSwitchVerify(ctx context.Context, target accounts.Account) 
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, providers.ErrAuthDenied) && strings.Contains(err.Error(), "token_revoked") {
+	if isRevokedTokenErr(err) {
 		return fmt.Errorf("%s: %s: %w", target.Email, msgTokensRevoked, providers.ErrAuthDenied)
 	}
 	return err

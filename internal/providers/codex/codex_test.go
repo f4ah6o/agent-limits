@@ -978,6 +978,33 @@ func TestFetch_LiveUnstoredUsageFetchFails(t *testing.T) {
 	}
 }
 
+// TestFetch_LiveUnstoredTokenInvalidatedTightens verifies the LiveUnstored row
+// applies the revoked-token tightening too: a 401 token_invalidated body on the
+// live, unreconciled credential surfaces msgTokensRevoked, not the raw HTTP body.
+func TestFetch_LiveUnstoredTokenInvalidatedTightens(t *testing.T) {
+	raw := []byte(`{"tokens":{"access_token":"tok-live","id_token":"x.y.z"}}`)
+	live := &cred.Credential{AccessToken: "tok-live", Raw: raw}
+
+	invalidatedBody := []byte(`{"error":{"code":"token_invalidated","message":"Your authentication token has been invalidated."}}`)
+	usageSrv := stubStaticServer(t, 401, invalidatedBody)
+	c := buildClient(t, usageSrv, noRefreshServer(t), live, nil, nil, nil, nil)
+
+	out, _ := c.Fetch(context.Background())
+	if len(out.Accounts) != 1 {
+		t.Fatalf("Accounts len = %d, want 1", len(out.Accounts))
+	}
+	ar := out.Accounts[0]
+	if ar.Email != "(live Codex account)" {
+		t.Errorf("Email = %q, want %q", ar.Email, "(live Codex account)")
+	}
+	if !strings.Contains(ar.Error, msgTokensRevoked) {
+		t.Errorf("ar.Error = %q, want substring %q", ar.Error, msgTokensRevoked)
+	}
+	if strings.Contains(ar.Error, "HTTP 401") {
+		t.Errorf("ar.Error should not contain raw 'HTTP 401' prefix: %q", ar.Error)
+	}
+}
+
 // TestFetch_AuthDeniedOnly_NilError verifies that when all accounts return 401
 // (ErrAuthDenied), the provider-level error is nil (not ErrTransient). D8
 // symmetry: ErrTransient requires at least one transient failure.
@@ -1419,11 +1446,11 @@ func TestFetch_UnknownDurationBucket(t *testing.T) {
 
 // ── refreshErrorMessage tests (Step 5 / B#3) ──────────────────────────────────
 
-// TestRefreshErrorMessage_StaleRefreshToken verifies that an error containing
-// "refresh_token already" returns msgStaleRefresh even when ErrRefreshRejected
+// TestRefreshErrorMessage_StaleRefreshToken verifies that the real upstream
+// "already been used" body returns msgStaleRefresh even when ErrRefreshRejected
 // is also wrapped (the strings.Contains branch must win over errors.Is).
 func TestRefreshErrorMessage_StaleRefreshToken(t *testing.T) {
-err := fmt.Errorf("%w: HTTP 400 from https://auth.openai.com/oauth/token: refresh_token already used", ErrRefreshRejected)
+err := fmt.Errorf("%w: HTTP 401 from https://auth.openai.com/oauth/token: Your refresh token has already been used to generate a new access token. Please try signing in again.", ErrRefreshRejected)
 got := refreshErrorMessage(err)
 if got != msgStaleRefresh {
 t.Errorf("refreshErrorMessage = %q, want %q", got, msgStaleRefresh)
@@ -1475,6 +1502,34 @@ t.Errorf("ar.Error should not contain raw 'HTTP 401' prefix: %q", ar.Error)
 }
 }
 
+// TestFetch_TokenInvalidatedSurfacesTightString verifies the usage endpoint's
+// other "dead token" code — token_invalidated, which OpenAI returns in place of
+// token_revoked at its discretion — also tightens to msgTokensRevoked end-to-end
+// through the HTTP/classifier layer, not just in the isRevokedTokenErr unit test.
+func TestFetch_TokenInvalidatedSurfacesTightString(t *testing.T) {
+invalidatedBody := []byte(`{"error":{"code":"token_invalidated","message":"Your authentication token has been invalidated."}}`)
+
+acctA := makeCodexAccount("uuid-a", "alice@example.com", "tok-a", "ref-a", 0)
+store := accounts.NewMemoryStore()
+_ = store.Upsert(context.Background(), acctA)
+live := makeCodexCred("tok-a", "ref-a", 0)
+
+usageSrv := stubStaticServer(t, 401, invalidatedBody)
+c := buildClient(t, usageSrv, noRefreshServer(t), live, store, noLookupCall(t), nil, nil)
+
+out, _ := c.Fetch(context.Background())
+if len(out.Accounts) != 1 {
+t.Fatalf("expected 1 account, got %d", len(out.Accounts))
+}
+ar := out.Accounts[0]
+if !strings.Contains(ar.Error, msgTokensRevoked) {
+t.Errorf("ar.Error = %q, want substring %q", ar.Error, msgTokensRevoked)
+}
+if strings.Contains(ar.Error, "HTTP 401") {
+t.Errorf("ar.Error should not contain raw 'HTTP 401' prefix: %q", ar.Error)
+}
+}
+
 // TestFetch_AuthDeniedOtherBodyFallsThrough verifies that a 401 with a non-token_revoked
 // body does not trigger the tightening (no false-positive).
 func TestFetch_AuthDeniedOtherBodyFallsThrough(t *testing.T) {
@@ -1498,6 +1553,28 @@ t.Error("ar.Error must be non-empty for auth-denied")
 }
 if strings.Contains(ar.Error, msgTokensRevoked) {
 t.Errorf("non-token_revoked body should not trigger tightening: %q", ar.Error)
+}
+}
+
+// TestIsRevokedTokenErr locks the two real upstream "dead token" codes to the
+// tightened message. The chatgpt.com usage endpoint has returned both
+// "token_revoked" and "token_invalidated" interchangeably for the same
+// condition; both must map to msgTokensRevoked.
+func TestIsRevokedTokenErr(t *testing.T) {
+cases := []struct {
+name string
+err  error
+want bool
+}{
+{"token_revoked usage body", fmt.Errorf("%w: HTTP 401: {\"error\":{\"code\":\"token_revoked\"}}", providers.ErrAuthDenied), true},
+{"token_invalidated usage body", fmt.Errorf("%w: HTTP 401 from https://chatgpt.com/backend-api/wham/usage: {\"error\":{\"code\":\"token_invalidated\",\"message\":\"Your authentication token has been invalidated.\"}}", providers.ErrAuthDenied), true},
+{"other auth-denied body", fmt.Errorf("%w: HTTP 401: some_other_error", providers.ErrAuthDenied), false},
+{"invalidated text but not auth-denied", errors.New("token_invalidated"), false},
+}
+for _, tc := range cases {
+if got := isRevokedTokenErr(tc.err); got != tc.want {
+t.Errorf("%s: isRevokedTokenErr = %v, want %v", tc.name, got, tc.want)
+}
 }
 }
 
