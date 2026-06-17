@@ -338,6 +338,42 @@ func TestFetch_parse(t *testing.T) {
 				t.Error("seven_day_omelette should be excluded when resets_at is null")
 			}
 		}},
+		{"array-valued sibling field tolerated", func(t *testing.T) {
+			// Anthropic added a top-level field whose value is a JSON array (a
+			// per-app usage breakdown). Decoding the whole body into
+			// map[string]*window used to fail the entire response with
+			// "cannot unmarshal array into ...window", hiding the five_hour /
+			// seven_day windows we actually surface. Only the closed set of keys
+			// must be decoded; siblings of any shape are ignored.
+			body := []byte(`{"five_hour":{"utilization":10.0,"resets_at":"2027-01-01T10:00:00+00:00"},"seven_day":{"utilization":60.0,"resets_at":"2027-01-02T06:00:00+00:00"},"seven_day_oauth_apps":null,"oauth_app_usage":[{"name":"app","utilization":5.0}]}`)
+			live := makeCred("tok-live", "ref", 0)
+			store := testutil.MemStore(t, makeAccount("u1", "a@b.com", "tok-live", "ref", 0))
+
+			usageSrv := testutil.NewStubServer(t, body, 200, nil)
+			profileSrv := testutil.RejectServer(t, "profile")
+			refreshSrv := testutil.RejectServer(t, "refresh")
+
+			out, err := buildClient(t, usageSrv, profileSrv, refreshSrv, live, store, nil, nil).Fetch(context.Background())
+			if err != nil {
+				t.Fatalf("array-valued sibling field must not fail the fetch: %v", err)
+			}
+			if len(out.Accounts) == 0 {
+				t.Fatal("expected an account row")
+			}
+			if e := out.Accounts[0].Error; e != "" {
+				t.Fatalf("array-valued sibling field must not produce a per-account error: %q", e)
+			}
+			limits := out.Accounts[0].Limits
+			if _, ok := limits["five_hour"]; !ok {
+				t.Error("five_hour must still be parsed despite the array-valued sibling field")
+			}
+			if _, ok := limits["seven_day"]; !ok {
+				t.Error("seven_day must still be parsed despite the array-valued sibling field")
+			}
+			if got := limits["five_hour"].UsedPercent; got != 10.0 {
+				t.Errorf("five_hour used_percent = %v, want 10.0", got)
+			}
+		}},
 		{"bad resets_at", func(t *testing.T) {
 			body := []byte(`{"five_hour":{"utilization":10.0,"resets_at":"yesterday"}}`)
 			live := makeCred("tok-live", "ref", 0)

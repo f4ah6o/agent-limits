@@ -168,7 +168,12 @@ func (c *Client) FetchUsage(ctx context.Context, accessToken, uuid string) (map[
 // perAccountBudget is used as the per-call ceiling within that budget.
 // No cache interaction; callers that want caching use fetchLimitsCached.
 func (c *Client) fetchLimitsFresh(ctx context.Context, accessToken string) (map[string]providers.Limit, error) {
-	var raw map[string]*window
+	// Decode into RawMessage values, NOT map[string]*window: Anthropic adds
+	// sibling fields over time (e.g. a per-app usage array) whose shapes we
+	// don't model. Forcing every value to be a window made one array-valued
+	// field fail the whole response — taking the five_hour / seven_day windows
+	// we do surface down with it. We decode only the closed set below.
+	var raw map[string]json.RawMessage
 	if err := c.doer.GetJSON(ctx, c.endpoint, accessToken, c.perAccountBudget, &raw, httpx.DefaultClassify); err != nil {
 		return nil, err
 	}
@@ -180,8 +185,18 @@ func (c *Client) fetchLimitsFresh(ctx context.Context, accessToken string) (map[
 	limits := map[string]providers.Limit{}
 	// Closed set of windows we surface; all others are intentionally filtered.
 	for _, key := range []string{"five_hour", "seven_day", "seven_day_sonnet"} {
-		win := raw[key]
-		if win == nil || win.ResetsAt == nil {
+		rawWin, ok := raw[key]
+		if !ok {
+			continue
+		}
+		var win window
+		if err := json.Unmarshal(rawWin, &win); err != nil {
+			// A surfaced key carrying an unexpected shape is skipped rather than
+			// failing the whole account — graceful degradation, same spirit as
+			// the array-valued sibling fields above.
+			continue
+		}
+		if win.ResetsAt == nil {
 			continue
 		}
 		resets, err := time.Parse(time.RFC3339Nano, *win.ResetsAt)
