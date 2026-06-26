@@ -22,10 +22,9 @@ var (
 const iso8601Layout = "2006-01-02T15:04:05-07:00"
 
 // KnownProviderIDs is the canonical list of provider identifiers in the order
-// the CLI documents them. The renderer's default order, the orchestrator's
-// requested-set when no provider is specified, and the CLI help text all
-// derive from this slice. Treat as immutable.
-var KnownProviderIDs = []string{"claude", "codex", "copilot"}
+// the CLI documents them. This read-only fork intentionally supports Claude and
+// Codex only.
+var KnownProviderIDs = []string{"claude", "codex"}
 
 // Title returns the human-readable section label for a known provider ID.
 // The caller must pass a non-empty ID from KnownProviderIDs.
@@ -33,14 +32,12 @@ func Title(id string) string {
 	return strings.ToUpper(id[:1]) + id[1:]
 }
 
-// ProjectURL is the upstream repository for this binary. Used in the User-Agent
-// (so endpoint owners can identify the client) and as the prefix for
-// IssueTrackerURL.
-const ProjectURL = "https://github.com/drogers0/aistat"
+// ProjectURL is this fork's repository URL. The upstream project remains a
+// reference only; install and issue links should point at this fork.
+const ProjectURL = "https://github.com/f4ah6o/aistat"
 
-// IssueTrackerURL is the upstream issue tracker. Cited in provider error
-// messages emitted when an upstream-API shape change is detected, so users
-// can file a bug with the exact context already in the message.
+// IssueTrackerURL is the issue tracker. Cited in provider error messages emitted
+// when an upstream-API shape change is detected.
 const IssueTrackerURL = ProjectURL + "/issues"
 
 // Provider is the contract every credential+endpoint backend implements.
@@ -108,14 +105,9 @@ func (r Report) MarshalJSON() ([]byte, error) {
 // Active is intentionally not omitempty — false is meaningful (the account is
 // stored but not currently live). Limits is intentionally NOT omitempty so a
 // successful fetch with zero recognized windows still serializes as
-// `"limits": {}` rather than vanishing — mirrors the Codex/Copilot top-level
-// contract where `{}` means "asked, got nothing" and `null` means "fetch
-// failed". The per-account fetch sets Limits to a non-nil (possibly empty)
-// map on success and leaves it nil + sets Error on failure. UUID is hidden
-// from JSON (json:"-") because email is the user-facing identifier for
-// scripted consumers; UUIDs surface in `aistat accounts list` text output
-// and in `aistat switch`'s confirmation line, both of which are the
-// discovery surfaces for UUID-prefix matching.
+// `"limits": {}` rather than vanishing. The per-account fetch sets Limits to a
+// non-nil (possibly empty) map on success and leaves it nil + sets Error on
+// failure.
 type AccountResult struct {
 	Email  string           `json:"email"`
 	UUID   string           `json:"-"`
@@ -131,14 +123,12 @@ type AccountResult struct {
 // "error" key.
 //
 // Limits serialization depends on whether Accounts is populated:
-//   - Accounts empty (Codex/Copilot path): Limits always serializes —
-//     success-with-windows → `"limits": {...}`, zero-windows → `"limits": {}`,
-//     failure → `"limits": null`. `{}` vs `null` lets callers distinguish
-//     "asked, got nothing" from "failed".
-//   - Accounts non-empty (Claude multi-account path): the `limits` key is
-//     omitted entirely. The active account's limits live in
-//     `accounts[i].limits` where `active == true`; a top-level mirror would
-//     just duplicate that block.
+//   - Accounts empty: Limits always serializes — success-with-windows →
+//     `"limits": {...}`, zero-windows → `"limits": {}`, failure →
+//     `"limits": null`.
+//   - Accounts non-empty: `accounts` is canonical and top-level limits are
+//     omitted. The forked CLI collapses live providers back to the single-account
+//     shape before rendering.
 type ProviderResult struct {
 	Limits   map[string]Limit `json:"limits"`
 	Accounts []AccountResult  `json:"accounts,omitempty"`
@@ -154,8 +144,7 @@ func (r ProviderResult) MarshalJSON() ([]byte, error) {
 			Error    string          `json:"error,omitempty"`
 		}{Accounts: r.Accounts, Error: r.Error})
 	}
-	// Legacy single-account path (Codex/Copilot, or Claude with no stored
-	// accounts and an immediate fetch error): always include limits.
+	// Single-account path: always include limits.
 	return json.Marshal(struct {
 		Limits map[string]Limit `json:"limits"`
 		Error  string           `json:"error,omitempty"`
