@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/drogers0/aistat/v2/internal/testutil"
+	"github.com/f4ah6o/aistat/v2/internal/testutil"
 )
 
 // makeTestJWT creates a minimal JWT (header.payload.sig) from the given JSON payload.

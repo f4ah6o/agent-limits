@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/drogers0/aistat/v2/internal/providers"
+	"github.com/f4ah6o/aistat/v2/internal/providers"
 )
 
 // DefaultUserAgent returns the User-Agent for Codex requests. Today this is

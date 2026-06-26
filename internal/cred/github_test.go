@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/drogers0/aistat/v2/internal/testutil"
+	"github.com/f4ah6o/aistat/v2/internal/testutil"
 )
 
 func TestReadGitHubToken(t *testing.T) {

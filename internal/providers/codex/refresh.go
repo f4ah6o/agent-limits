@@ -9,14 +9,16 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/drogers0/aistat/v2/internal/httpx"
-	"github.com/drogers0/aistat/v2/internal/providers"
+	"github.com/f4ah6o/aistat/v2/internal/httpx"
+	"github.com/f4ah6o/aistat/v2/internal/providers"
 )
 
 // codexTokenEndpoint is the OAuth token endpoint for the Codex CLI.
 //
 // Confirmed via binary inspection of the Codex CLI (aarch64-apple-darwin build):
-//   strings .../codex-darwin-arm64/vendor/aarch64-apple-darwin/codex/codex | grep "oauth/token"
+//
+//	strings .../codex-darwin-arm64/vendor/aarch64-apple-darwin/codex/codex | grep "oauth/token"
+//
 // Output: "https://auth.openai.com/oauth/token" appears adjacent to the refresh
 // flow strings ("access_token", "refresh_token", "client_id", "grant_type").
 // Also visible: CODEX_REFRESH_TOKEN_URL_OVERRIDE env var, confirming this is
@@ -26,7 +28,9 @@ const codexTokenEndpoint = "https://auth.openai.com/oauth/token"
 // codexOAuthClientID is the OAuth client_id for the Codex CLI application.
 //
 // Confirmed via binary inspection of the Codex CLI (aarch64-apple-darwin build):
-//   strings .../codex-darwin-arm64/vendor/aarch64-apple-darwin/codex/codex | grep "app_E"
+//
+//	strings .../codex-darwin-arm64/vendor/aarch64-apple-darwin/codex/codex | grep "app_E"
+//
 // Output: "app_EMoamEEZ73f0CkXaXp7hrann" appears in the POST body format string
 // alongside "access_token", "refresh_token", "client_id", "grant_type".
 // Also verified from the live access_token JWT payload field "client_id".

@@ -3,8 +3,8 @@ package codex
 import (
 	"encoding/json"
 
-	"github.com/drogers0/aistat/v2/internal/accounts"
-	"github.com/drogers0/aistat/v2/internal/cred"
+	"github.com/f4ah6o/aistat/v2/internal/accounts"
+	"github.com/f4ah6o/aistat/v2/internal/cred"
 )
 
 // rawCodexTokens is the minimal Codex auth.json shape for token field extraction

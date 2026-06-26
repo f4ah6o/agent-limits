@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/drogers0/aistat/v2/internal/accounts"
+	"github.com/f4ah6o/aistat/v2/internal/accounts"
 )
 
 // LoadFixture reads testdata/<name> relative to the calling package's testdata

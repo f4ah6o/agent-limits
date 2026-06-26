@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/drogers0/aistat/v2/internal/accounts"
-	"github.com/drogers0/aistat/v2/internal/cred"
+	"github.com/f4ah6o/aistat/v2/internal/accounts"
+	"github.com/f4ah6o/aistat/v2/internal/cred"
 )
 
 // ReconcileInput is the full input set for Reconcile and ResolveActiveUUID.
@@ -15,7 +15,7 @@ import (
 // the id_token is non-empty. It must not be nil when LiveBlob is non-nil.
 // Identity resolution is pure (D1: JWT decode, no network).
 type ReconcileInput struct {
-	LiveBlob *cred.Credential                         // nil if absent; Raw holds exact live bytes
+	LiveBlob *cred.Credential // nil if absent; Raw holds exact live bytes
 	Stored   []accounts.Account
 	LookupID func(idToken string) (sub, email string, err error)
 	Now      time.Time

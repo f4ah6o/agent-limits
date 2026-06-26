@@ -9,7 +9,7 @@ func TestDefaultUserAgent(t *testing.T) {
 		version string
 		want    string
 	}{
-		{"default", "", "2.1.0", "aistat/2.1.0 (+https://github.com/drogers0/aistat)"},
+		{"default", "", "2.1.0", "aistat/2.1.0 (+https://github.com/f4ah6o/aistat)"},
 		{"env override", "custom-ua/9", "2.1.0", "custom-ua/9"},
 	}
 	for _, tt := range tests {

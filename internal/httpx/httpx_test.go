@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/drogers0/aistat/v2/internal/providers"
-	"github.com/drogers0/aistat/v2/internal/testutil"
+	"github.com/f4ah6o/aistat/v2/internal/providers"
+	"github.com/f4ah6o/aistat/v2/internal/testutil"
 )
 
 func newDoer(t *testing.T, client *http.Client) *Doer {

@@ -10,7 +10,7 @@ func TestDefaultUserAgent(t *testing.T) {
 		{"default without env override", func(t *testing.T) {
 			t.Setenv("AISTAT_COPILOT_USER_AGENT", "")
 			got := DefaultUserAgent("2.1.0")
-			want := "aistat/2.1.0 (+https://github.com/drogers0/aistat)"
+			want := "aistat/2.1.0 (+https://github.com/f4ah6o/aistat)"
 			if got != want {
 				t.Errorf("DefaultUserAgent = %q, want %q", got, want)
 			}

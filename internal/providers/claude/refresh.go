@@ -9,8 +9,8 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/drogers0/aistat/v2/internal/httpx"
-	"github.com/drogers0/aistat/v2/internal/providers"
+	"github.com/f4ah6o/aistat/v2/internal/httpx"
+	"github.com/f4ah6o/aistat/v2/internal/providers"
 )
 
 // claudeTokenEndpoint is Anthropic's OAuth token endpoint for the Claude CLI.
@@ -75,7 +75,7 @@ type refreshClient struct {
 	doer     *httpx.Doer
 	endpoint string
 	timeout  time.Duration
-	clientID string         // "" if not required by the endpoint
+	clientID string // "" if not required by the endpoint
 	now      func() time.Time
 }
 

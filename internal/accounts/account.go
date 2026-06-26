@@ -15,11 +15,11 @@ import (
 // JSON from the provider's live store; it is written back byte-for-byte by
 // `aistat switch` so unknown fields are never dropped.
 type Account struct {
-	UUID          string          `json:"uuid"`
-	Email         string          `json:"email"`
-	DisplayName   string          `json:"display_name"`
-	RateLimitTier string          `json:"rate_limit_tier"`
-	LastSeenAt    time.Time       `json:"last_seen_at"`
+	UUID          string    `json:"uuid"`
+	Email         string    `json:"email"`
+	DisplayName   string    `json:"display_name"`
+	RateLimitTier string    `json:"rate_limit_tier"`
+	LastSeenAt    time.Time `json:"last_seen_at"`
 	// RawBlob is the full credential JSON blob as read from the provider's live
 	// store. `aistat switch` writes this blob back verbatim.
 	RawBlob json.RawMessage `json:"raw_blob"`
