@@ -11,10 +11,10 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/drogers0/aistat/v2/internal/httpx"
-	"github.com/drogers0/aistat/v2/internal/orchestrate"
-	"github.com/drogers0/aistat/v2/internal/providers"
-	"github.com/drogers0/aistat/v2/internal/render"
+	"github.com/f4ah6o/aistat/v2/internal/httpx"
+	"github.com/f4ah6o/aistat/v2/internal/orchestrate"
+	"github.com/f4ah6o/aistat/v2/internal/providers"
+	"github.com/f4ah6o/aistat/v2/internal/render"
 )
 
 // runUsage runs the `usage` subcommand: fetch and render provider limits.
