@@ -31,7 +31,7 @@ var helpText = buildHelpText()
 
 func buildHelpText() string {
 	var sb strings.Builder
-	sb.WriteString("aistat — report and manage Claude / Codex / Copilot usage\n\nUsage:\n  aistat [global flags] [subcommand] [args]\n\nSubcommands:\n  usage [<provider>]                 Report usage for all providers (default), or one: claude, codex, copilot\n  switch [<provider>] [--to <id>]    Switch the live account (bulk across providers if omitted)\n  accounts list [<provider>]         List stored accounts (all providers if omitted)\n  accounts remove <id> [<provider>]  Remove a stored account; provider inferred from id if unambiguous\n\nGlobal flags:\n  -h, --human    Render human-readable text instead of JSON\n      --debug    Write per-request and per-provider lines to stderr\n      --version  Print version and exit\n      --help     Print this help and exit\n\nusage flags:\n  --refresh      Bypass the per-account usage cache (~90s TTL) and force a fresh read\n\nswitch notes:\n  Without a provider, switches every provider that has ≥2 stored accounts.\n  --to <id> matches email substring or UUID prefix. Without a provider arg,\n  the provider is inferred when <id> matches exactly one provider's store.\n\naccounts notes:\n  Default output is JSON; use -h/--human for text.\n  remove infers the provider when <id> is unambiguous across stores.\n\nExit codes:\n  0  All requested operations succeeded (or nothing to do).\n  1  One or more providers failed at runtime.\n  2  Usage error (unknown subcommand, malformed flags, ambiguous id).\n  3  Stdout write error (broken pipe, disk full).\n")
+	sb.WriteString("aistat — read Claude / Codex usage limits\n\nUsage:\n  aistat [global flags] [subcommand] [args]\n\nSubcommands:\n  usage [<provider>]  Report usage for all providers (default), or one: claude, codex\n\nGlobal flags:\n  -h, --human    Render human-readable text instead of JSON\n      --debug    Write per-request and per-provider lines to stderr\n      --version  Print version and exit\n      --help     Print this help and exit\n\nusage flags:\n  --refresh      Bypass the usage cache and force a fresh read\n\nRead-only fork notes:\n  switch/account management commands are intentionally removed.\n  Copilot is intentionally omitted.\n  This CLI reads existing Claude/Codex credentials but does not rotate live credentials.\n\nExit codes:\n  0  All requested operations succeeded.\n  1  One or more providers failed at runtime.\n  2  Usage error (unknown subcommand, unknown provider, malformed flags).\n  3  Stdout write error (broken pipe, disk full).\n")
 	return sb.String()
 }
 
@@ -134,13 +134,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	switch sub {
 	case "", "usage":
 		return runUsage(rest, stdout, stderr, g)
-	case "switch":
-		return runSwitch(rest, stdout, stderr, g)
-	case "accounts":
-		return runAccountsSubcommand(rest, stdout, stderr, g)
 	default:
 		fmt.Fprintf(stderr, "unknown subcommand %q\n", sub)
 		return int(orchestrate.StatusUsageError)
 	}
 }
-
