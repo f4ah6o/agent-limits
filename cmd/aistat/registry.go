@@ -1,7 +1,8 @@
 package main
 
 import (
-	"fmt"
+	"context"
+	"errors"
 	"io"
 
 	"github.com/drogers0/aistat/v2/internal/accounts"
@@ -9,64 +10,55 @@ import (
 	"github.com/drogers0/aistat/v2/internal/providers"
 	"github.com/drogers0/aistat/v2/internal/providers/claude"
 	"github.com/drogers0/aistat/v2/internal/providers/codex"
-	"github.com/drogers0/aistat/v2/internal/providers/copilot"
 )
 
-// realProviders constructs the live providers. serialStderr is the
-// mutex-wrapped writer that backs three concurrent stderr consumers
-// (per-Doer debug, orchestrator per-provider summary, Copilot warn), so
-// all three serialize through one mutex. The mutex is always in the path
-// because copilot.warn is unconditional. includeDebug toggles per-request
-// debug logging — when false, Doers receive a nil Debug writer.
+// realProviders constructs the live read-only providers.
 //
-// Platform account stores are opened here for Claude and Codex and passed
-// via WithStore. On open failure the warn is emitted unconditionally (not
-// gated on --debug, so the user sees keychain breakage) and a MemoryStore
-// is used as a safe no-op fallback: List returns empty, Upsert/Delete are
-// no-ops for this run, but the live credential still drives a usable result.
+// This fork intentionally does not open the platform account store. Claude and
+// Codex receive per-process memory stores, and Copilot is intentionally omitted.
 func realProviders(serialStderr *httpx.ConcurrencySafeWriter, includeDebug bool, cacheBypass bool) []providers.Provider {
 	var debugSink io.Writer
 	if includeDebug {
 		debugSink = serialStderr
 	}
 
-	var storeDebug io.Writer
-	if includeDebug {
-		storeDebug = serialStderr
-	}
-	store, err := accounts.OpenStore(accounts.ProviderClaude, accounts.WithDebug(storeDebug))
-	if err != nil {
-		fmt.Fprintln(serialStderr, "aistat: claude: could not open account store ("+err.Error()+"); proceeding with live credential only")
-		store = accounts.NewMemoryStore()
-	}
-
-	codexStore, codexStoreErr := accounts.OpenStore(accounts.ProviderCodex, accounts.WithDebug(storeDebug))
-	if codexStoreErr != nil {
-		fmt.Fprintln(serialStderr, "aistat: codex: could not open account store ("+codexStoreErr.Error()+"); proceeding with live credential only")
-		codexStore = accounts.NewMemoryStore()
-	}
-
 	v := resolvedVersion()
 	return []providers.Provider{
-		claude.New(debugSink, claude.DefaultUserAgent(v), claude.WithStore(store), claude.WithCacheBypass(cacheBypass)),
-		codex.New(debugSink, codex.DefaultUserAgent(v), codex.WithStore(codexStore), codex.WithCacheBypass(cacheBypass)),
-		copilot.New(debugSink, copilot.DefaultUserAgent(v), copilot.WithWarn(wrapWarn(serialStderr))),
+		singleAccountProvider{Provider: claude.New(debugSink, claude.DefaultUserAgent(v), claude.WithStore(accounts.NewMemoryStore()), claude.WithCacheBypass(cacheBypass))},
+		singleAccountProvider{Provider: codex.New(debugSink, codex.DefaultUserAgent(v), codex.WithStore(accounts.NewMemoryStore()), codex.WithCacheBypass(cacheBypass))},
 	}
 }
 
-// wrapWarn returns the warn callback wired into copilot.New. Every line the
-// provider emits is prefixed with "aistat: " so the source is obvious
-// when --debug is OFF and only the quota-key-drift line surfaces. Extracted from
-// realProviders so the prefix contract is unit-testable without HTTP.
-func wrapWarn(out io.Writer) func(string) {
-	return func(s string) { fmt.Fprintln(out, "aistat: "+s) }
+// singleAccountProvider collapses the upstream multi-account provider shape into
+// a single active-account limits block.
+type singleAccountProvider struct {
+	providers.Provider
+}
+
+func (p singleAccountProvider) Fetch(ctx context.Context) (providers.ProviderOutput, error) {
+	out, err := p.Provider.Fetch(ctx)
+	if len(out.Accounts) == 0 {
+		return out, err
+	}
+
+	selected := &out.Accounts[0]
+	for i := range out.Accounts {
+		if out.Accounts[i].Active {
+			selected = &out.Accounts[i]
+			break
+		}
+	}
+
+	collapsed := providers.ProviderOutput{Limits: selected.Limits}
+	if selected.Error != "" && err == nil {
+		err = errors.New(selected.Error)
+	}
+	return collapsed, err
 }
 
 // buildProviders resolves the provider set (fake-mode-first) and picks the
 // orchestrator debug writer. Extracted from runUsage() to keep that function
-// scannable and to provide a non-CLI seam for tests that exercise
-// warn-wiring against the real provider construction. The mutex inside
-// serialStderr is always in the path because copilot.warn is unconditional.
+// scannable.
 func buildProviders(
 	serialStderr *httpx.ConcurrencySafeWriter,
 	includeDebug bool,
