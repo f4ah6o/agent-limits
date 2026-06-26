@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/drogers0/aistat/v2/internal/httpx"
-	"github.com/drogers0/aistat/v2/internal/providers"
+	"github.com/f4ah6o/aistat/v2/internal/httpx"
+	"github.com/f4ah6o/aistat/v2/internal/providers"
 )
 
 func newTestProfileClient(t *testing.T, body []byte, status int) *profileClient {

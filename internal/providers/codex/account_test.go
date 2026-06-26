@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/drogers0/aistat/v2/internal/accounts"
+	"github.com/f4ah6o/aistat/v2/internal/accounts"
 )
 
 func loadFixtureBytes(t *testing.T, name string) []byte {

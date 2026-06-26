@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/drogers0/aistat/v2/internal/accounts"
+	"github.com/f4ah6o/aistat/v2/internal/accounts"
 )
 
 // makeRawBlob builds a minimal Claude credential blob for account helper tests.

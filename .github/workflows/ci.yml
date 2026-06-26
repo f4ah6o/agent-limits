@@ -24,7 +24,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(go list -m)" = "github.com/f4ah6o/aistat/v2"
-          if git grep -n 'github.com/drogers0/aistat/v2' -- '*.go' 'go.mod' 'README.md' '.goreleaser.yaml' '.github/workflows/*.yml'; then
+          if git grep -n 'github.com/f4ah6o/aistat/v2' -- '*.go' 'go.mod' 'README.md' '.goreleaser.yaml' '.github/workflows/*.yml'; then
             echo 'old upstream Go module path remains' >&2
             exit 1
           fi

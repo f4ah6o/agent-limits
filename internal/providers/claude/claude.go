@@ -10,12 +10,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/drogers0/aistat/v2/internal/accounts"
-	"github.com/drogers0/aistat/v2/internal/cred"
-	"github.com/drogers0/aistat/v2/internal/httpx"
-	"github.com/drogers0/aistat/v2/internal/providers"
-	"github.com/drogers0/aistat/v2/internal/providers/multiaccount"
-	"github.com/drogers0/aistat/v2/internal/providers/usagecache"
+	"github.com/f4ah6o/aistat/v2/internal/accounts"
+	"github.com/f4ah6o/aistat/v2/internal/cred"
+	"github.com/f4ah6o/aistat/v2/internal/httpx"
+	"github.com/f4ah6o/aistat/v2/internal/providers"
+	"github.com/f4ah6o/aistat/v2/internal/providers/multiaccount"
+	"github.com/f4ah6o/aistat/v2/internal/providers/usagecache"
 )
 
 const (
@@ -54,7 +54,7 @@ type Client struct {
 	baseTimeout      time.Duration
 	perAccountBudget time.Duration
 	cache            *usagecache.Cache // always non-nil; disabled state degrades to no-op
-	cacheBypass      bool        // skips the cache read path; writes still propagate (D8)
+	cacheBypass      bool              // skips the cache read path; writes still propagate (D8)
 }
 
 // Option mutates a Client at construction time.

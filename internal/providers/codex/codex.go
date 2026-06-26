@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/drogers0/aistat/v2/internal/accounts"
-	"github.com/drogers0/aistat/v2/internal/cred"
-	"github.com/drogers0/aistat/v2/internal/httpx"
-	"github.com/drogers0/aistat/v2/internal/providers"
-	"github.com/drogers0/aistat/v2/internal/providers/multiaccount"
-	"github.com/drogers0/aistat/v2/internal/providers/usagecache"
+	"github.com/f4ah6o/aistat/v2/internal/accounts"
+	"github.com/f4ah6o/aistat/v2/internal/cred"
+	"github.com/f4ah6o/aistat/v2/internal/httpx"
+	"github.com/f4ah6o/aistat/v2/internal/providers"
+	"github.com/f4ah6o/aistat/v2/internal/providers/multiaccount"
+	"github.com/f4ah6o/aistat/v2/internal/providers/usagecache"
 )
 
 const (
@@ -67,7 +67,7 @@ type Client struct {
 	store            accounts.Store
 	readCredential   func(ctx context.Context) (cred.Credential, error)
 	lookupID         func(idToken string) (sub, email string, err error) // nil → wraps cred.ParseCodexIDToken
-	warn             io.Writer // receives per-run warn lines; defaults to os.Stderr in New
+	warn             io.Writer                                           // receives per-run warn lines; defaults to os.Stderr in New
 	now              func() time.Time
 	baseTimeout      time.Duration
 	perAccountBudget time.Duration

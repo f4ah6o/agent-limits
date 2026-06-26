@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/drogers0/aistat/v2/internal/providers"
+	"github.com/f4ah6o/aistat/v2/internal/providers"
 )
 
 // Cache is a no-op stub on unsupported platforms. All operations return

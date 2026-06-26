@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/drogers0/aistat/v2/internal/providers"
+	"github.com/f4ah6o/aistat/v2/internal/providers"
 )
 
 // textLabels holds the human-facing label and the display order for every

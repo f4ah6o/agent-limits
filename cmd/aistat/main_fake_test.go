@@ -29,7 +29,7 @@ func TestCLIFakeJSON(t *testing.T) {
 				t.Fatal("missing checked_at")
 			}
 			provs, _ := got["providers"].(map[string]any)
-			for _, id := range []string{"claude", "codex", "copilot"} {
+			for _, id := range []string{"claude", "codex"} {
 				if _, ok := provs[id]; !ok {
 					t.Errorf("missing provider %s", id)
 				}
@@ -71,12 +71,14 @@ func TestCLIFakeText(t *testing.T) {
 			if r.code != 0 {
 				t.Fatalf("exit %d, stderr: %s", r.code, r.stderr)
 			}
-			// Provider order: Claude → Codex → Copilot.
+			// Provider order: Claude → Codex. Copilot is intentionally omitted.
 			iC := strings.Index(r.stdout, "Claude usage")
 			iCx := strings.Index(r.stdout, "Codex usage")
-			iCp := strings.Index(r.stdout, "Copilot usage")
-			if !(iC >= 0 && iC < iCx && iCx < iCp) {
+			if !(iC >= 0 && iC < iCx) {
 				t.Fatalf("wrong section order:\n%s", r.stdout)
+			}
+			if strings.Contains(r.stdout, "Copilot usage") {
+				t.Fatalf("Copilot should be absent:\n%s", r.stdout)
 			}
 			// Sanity-check one line shape with the design's format.
 			if !regexp.MustCompile(`- 5-hour: \d+\.\d% \(resets in [^\)]+\)`).MatchString(r.stdout) {

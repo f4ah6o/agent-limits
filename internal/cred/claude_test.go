@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/drogers0/aistat/v2/internal/testutil"
+	"github.com/f4ah6o/aistat/v2/internal/testutil"
 )
 
 func TestParseClaudeCred(t *testing.T) {

@@ -1,36 +1,24 @@
 package main
 
 import (
-	"bytes"
-	"strings"
+	"io"
 	"testing"
 
-	"github.com/drogers0/aistat/v2/internal/httpx"
+	"github.com/f4ah6o/aistat/v2/internal/httpx"
 )
 
-func TestWrapWarn_PrefixesLines(t *testing.T) {
-	var buf bytes.Buffer
-	wrapWarn(&buf)("copilot: something drifted")
-	got := buf.String()
-	if !strings.HasPrefix(got, "aistat: copilot: something drifted") {
-		t.Fatalf("missing prefix; got %q", got)
-	}
-	if !strings.HasSuffix(got, "\n") {
-		t.Fatalf("expected trailing newline; got %q", got)
-	}
-}
+func TestRealProvidersAreReadOnlyForkScope(t *testing.T) {
+	serialStderr := httpx.NewConcurrencySafeWriter(io.Discard)
 
-func TestRealProviders_ReturnsThreeInOrder(t *testing.T) {
-	var buf bytes.Buffer
-	safe := httpx.NewConcurrencySafeWriter(&buf)
-	got := realProviders(safe, false, false)
-	if len(got) != 3 {
-		t.Fatalf("want 3 providers, got %d", len(got))
+	chosen := realProviders(serialStderr, false, false)
+	if len(chosen) != 2 {
+		t.Fatalf("expected 2 providers, got %d", len(chosen))
 	}
-	wantIDs := []string{"claude", "codex", "copilot"}
-	for i, want := range wantIDs {
-		if got[i].ID() != want {
-			t.Errorf("position %d: id = %q, want %q", i, got[i].ID(), want)
-		}
+
+	if chosen[0].ID() != "claude" {
+		t.Fatalf("provider[0] = %q, want claude", chosen[0].ID())
+	}
+	if chosen[1].ID() != "codex" {
+		t.Fatalf("provider[1] = %q, want codex", chosen[1].ID())
 	}
 }

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/drogers0/aistat/v2/internal/accounts"
-	"github.com/drogers0/aistat/v2/internal/cred"
-	"github.com/drogers0/aistat/v2/internal/providers"
+	"github.com/f4ah6o/aistat/v2/internal/accounts"
+	"github.com/f4ah6o/aistat/v2/internal/cred"
+	"github.com/f4ah6o/aistat/v2/internal/providers"
 )
 
 // ReconcileInput is the full input set for Reconcile and ResolveActiveUUID.
@@ -18,7 +18,7 @@ import (
 // profile call lives at the callsite (e.g. Fetch); the callback intentionally
 // omits ctx so that Reconcile remains a pure function with no I/O of its own.
 type ReconcileInput struct {
-	LiveBlob      *cred.Credential                      // nil if absent; Raw holds exact live bytes
+	LiveBlob      *cred.Credential // nil if absent; Raw holds exact live bytes
 	Stored        []accounts.Account
 	LookupProfile func(accessToken string) (Profile, error)
 	Now           time.Time

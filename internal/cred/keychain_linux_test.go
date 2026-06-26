@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/drogers0/aistat/v2/internal/testutil"
+	"github.com/f4ah6o/aistat/v2/internal/testutil"
 )
 
 func writeCred(t *testing.T, dir, body string) string {

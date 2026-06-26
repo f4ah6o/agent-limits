@@ -10,7 +10,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/drogers0/aistat/v2/internal/testutil"
+	"github.com/f4ah6o/aistat/v2/internal/testutil"
 )
 
 // TestWriteClaudeLiveBlob verifies the seam-based and live keychain write paths.

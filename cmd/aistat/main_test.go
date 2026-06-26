@@ -44,7 +44,7 @@ func TestCLIHelpVersion(t *testing.T) {
 	wantExit(t, r, 0)
 	wantOut(t, r, "aistat")
 	wantOut(t, r, "claude, codex")
-	wantOut(t, r, "read-only")
+	wantOut(t, r, "Read-only")
 
 	r = runCLI("--version")
 	wantExit(t, r, 0)
