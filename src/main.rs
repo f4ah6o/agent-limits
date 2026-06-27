@@ -60,13 +60,13 @@ enum OpenCodeGoAction {
     ///   Auth cookie  : open DevTools (F12) → Application → Cookies →
     ///                  https://opencode.ai → copy the value of the "auth" cookie
     Setup {
-        /// Workspace ID (from the dashboard URL)
+        /// Workspace ID (from the dashboard URL). If omitted, setup tries Chrome.
         #[arg(long)]
-        workspace_id: String,
+        workspace_id: Option<String>,
 
-        /// Auth cookie value (from browser DevTools)
+        /// Auth cookie value (from browser DevTools). If omitted, setup tries Chrome.
         #[arg(long)]
-        auth_cookie: String,
+        auth_cookie: Option<String>,
     },
 }
 

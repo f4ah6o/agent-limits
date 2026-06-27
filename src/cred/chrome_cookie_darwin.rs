@@ -137,7 +137,10 @@ fn decrypt_cookie(encrypted: &[u8], key: &[u8; 16]) -> Option<String> {
     let pt = Aes128CbcDec::new(key.into(), &iv.into())
         .decrypt_padded_mut::<Pkcs7>(&mut buf)
         .ok()?;
-    String::from_utf8(pt.to_vec()).ok()
+    // Chromium cookie DB schema version 24 prefixes decrypted values with a
+    // SHA-256 digest of the host key.
+    let value = if pt.len() > 32 { &pt[32..] } else { pt };
+    String::from_utf8(value.to_vec()).ok()
 }
 
 /// Extract workspace ID from the browser's History database by searching for

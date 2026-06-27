@@ -21,18 +21,18 @@ pub fn default_user_agent(version: &str) -> String {
 fn re_window_block() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r#""(rolling|weekly|monthly)"\s*:\s*\{([^}]*)\}"#).unwrap()
+        Regex::new(r#"(?:\"(rolling|weekly|monthly)\"|(rolling|weekly|monthly)Usage)\s*:\s*(?:\$R\[\d+\]\s*=\s*)?\{([^}]*)\}"?"#).unwrap()
     })
 }
 
 fn re_usage_pct() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r#""usagePercent"\s*:\s*(\d+(?:\.\d+)?)"#).unwrap())
+    RE.get_or_init(|| Regex::new(r#"\"?usagePercent\"?\s*:\s*(\d+(?:\.\d+)?)"#).unwrap())
 }
 
 fn re_reset_sec() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r#""resetInSec"\s*:\s*(\d+)"#).unwrap())
+    RE.get_or_init(|| Regex::new(r#"\"?resetInSec\"?\s*:\s*(\d+)"#).unwrap())
 }
 
 fn window_key(name: &str) -> &'static str {
@@ -139,8 +139,12 @@ fn parse_dashboard(body: &str) -> Result<BTreeMap<String, Limit>, ProviderError>
     let mut limits = BTreeMap::new();
 
     for cap in re_window_block().captures_iter(body) {
-        let window_name = cap.get(1).unwrap().as_str();
-        let block = cap.get(2).unwrap().as_str();
+        let window_name = cap
+            .get(1)
+            .or_else(|| cap.get(2))
+            .unwrap()
+            .as_str();
+        let block = cap.get(3).unwrap().as_str();
 
         let used_pct = match re_usage_pct().captures(block) {
             Some(m) => m[1].parse::<f64>().unwrap_or(0.0),
