@@ -13,7 +13,7 @@ const FETCH_TIMEOUT_SECS: u64 = 10;
 pub fn default_user_agent(version: &str) -> String {
     std::env::var("AISTAT_OPENCODEGO_USER_AGENT").unwrap_or_else(|_| {
         format!(
-            "agent-usage/{} (opencodego; https://github.com/f4ah6o/agent-usage)",
+            "agent-limits/{} (opencodego; https://github.com/f4ah6o/agent-usage)",
             version
         )
     })

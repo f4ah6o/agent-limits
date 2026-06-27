@@ -1,6 +1,6 @@
-# agent-usage
+# agent-limits
 
-`agent-usage` reports Claude Code, Codex, and OpenCode Go usage limits from the terminal.
+`agent-limits` reports Claude Code, Codex, and OpenCode Go usage limits from the terminal.
 
 JSON is the default output. Pass `--human` for a compact text view.
 
@@ -9,26 +9,26 @@ JSON is the default output. Pass `--human` for a compact text view.
 From crates.io:
 
 ```bash
-cargo install agent-usage
+cargo install agent-limits
 ```
 
 From GitHub release binaries with cargo-binstall:
 
 ```bash
-cargo binstall agent-usage
+cargo binstall agent-limits
 ```
 
 ## Usage
 
 ```bash
-agent-usage                         # same as `agent-usage usage`
-agent-usage usage                   # report all configured providers
-agent-usage usage claude            # report Claude only
-agent-usage usage codex             # report Codex only
-agent-usage usage opencodego        # report OpenCode Go only
-agent-usage usage --refresh         # bypass the 90 s usage cache
-agent-usage --human usage           # human-readable output
-agent-usage --debug usage codex     # request/debug lines on stderr
+agent-limits                         # same as `agent-limits usage`
+agent-limits usage                   # report all configured providers
+agent-limits usage claude            # report Claude only
+agent-limits usage codex             # report Codex only
+agent-limits usage opencodego        # report OpenCode Go only
+agent-limits usage --refresh         # bypass the 90 s usage cache
+agent-limits --human usage           # human-readable output
+agent-limits --debug usage codex     # request/debug lines on stderr
 ```
 
 Example:
@@ -46,9 +46,9 @@ Opencodego usage
 |---|---|
 | Claude | `claude /login` |
 | Codex | `codex login` |
-| OpenCode Go | `agent-usage opencodego setup` on macOS Chrome, or set `OPENCODE_GO_WORKSPACE_ID` and `OPENCODE_GO_AUTH_COOKIE` |
+| OpenCode Go | `agent-limits opencodego setup` on macOS Chrome, or set `OPENCODE_GO_WORKSPACE_ID` and `OPENCODE_GO_AUTH_COOKIE` |
 
-`agent-usage opencodego setup` stores the workspace ID and auth cookie in:
+`agent-limits opencodego setup` stores the workspace ID and auth cookie in:
 
 ```text
 ~/Library/Application Support/opencode-bar/opencode-go.json

@@ -1,5 +1,5 @@
 [package]
-name = "agent-usage"
+name = "agent-limits"
 version = "2026.6.0"
 edition = "2021"
 rust-version = "1.85"
@@ -19,7 +19,7 @@ include = [
 ]
 
 [[bin]]
-name = "agent-usage"
+name = "agent-limits"
 path = "src/main.rs"
 
 [dependencies]

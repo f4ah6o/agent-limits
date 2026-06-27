@@ -114,7 +114,7 @@ where
                 accounts: input.stored.to_vec(),
                 active_uuid: String::new(),
                 capture_warn: Some(
-                    "agent-usage: claude: could not identify live credential via profile endpoint; rendering as unstored account".into(),
+                    "agent-limits: claude: could not identify live credential via profile endpoint; rendering as unstored account".into(),
                 ),
                 inserted: false,
                 upserted: false,

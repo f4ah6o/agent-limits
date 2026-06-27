@@ -61,7 +61,7 @@ pub fn run(
                         Err(e) => {
                             // In bulk (non-explicit) runs, AuthMissing from an optional
                             // provider (e.g. opencodego) is treated as a skip so users
-                            // who haven't set it up don't get exit 1 from `agent-usage`.
+                            // who haven't set it up don't get exit 1 from `agent-limits`.
                             // Claude/Codex are not optional, so their AuthMissing always
                             // sets the flag. Explicit provider requests always set it too.
                             let suppress = !explicit_request

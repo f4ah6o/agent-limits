@@ -29,7 +29,7 @@ const REFRESH_SKEW_MS: i64 = 30_000;
 
 pub fn default_user_agent(version: &str) -> String {
     format!(
-        "agent-usage/{} (codex; https://github.com/f4ah6o/agent-usage)",
+        "agent-limits/{} (codex; https://github.com/f4ah6o/agent-usage)",
         version
     )
 }
@@ -214,7 +214,7 @@ impl Provider for CodexClient {
         let live = self.read_live_credential()?;
 
         let stored = self.store.list().unwrap_or_else(|e| {
-            eprintln!("agent-usage: codex: could not read account store ({}); proceeding with live credential only", e);
+            eprintln!("agent-limits: codex: could not read account store ({}); proceeding with live credential only", e);
             vec![]
         });
 
@@ -278,7 +278,7 @@ impl Provider for CodexClient {
             }
             if revoked {
                 ar.error = Some(format!(
-                    "agent-usage: codex: {}: tokens revoked by upstream (likely a `codex login` for another account); run `codex login` to recover",
+                    "agent-limits: codex: {}: tokens revoked by upstream (likely a `codex login` for another account); run `codex login` to recover",
                     ar.email
                 ));
             }
@@ -335,7 +335,7 @@ impl Provider for CodexClient {
             }
             if revoked {
                 ar.error = Some(format!(
-                    "agent-usage: codex: {}: tokens revoked by upstream (likely a `codex login` for another account); run `codex login` to recover",
+                    "agent-limits: codex: {}: tokens revoked by upstream (likely a `codex login` for another account); run `codex login` to recover",
                     acct.email
                 ));
             }

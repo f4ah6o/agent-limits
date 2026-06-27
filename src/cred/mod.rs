@@ -17,7 +17,7 @@ pub enum CredError {
     ClaudeNotFound,
     #[error("codex token not found at ~/.codex/auth.json — run `codex login`")]
     CodexNotFound,
-    #[error("opencode go config not found — set OPENCODE_GO_WORKSPACE_ID and OPENCODE_GO_AUTH_COOKIE, or run `agent-usage opencodego setup`")]
+    #[error("opencode go config not found — set OPENCODE_GO_WORKSPACE_ID and OPENCODE_GO_AUTH_COOKIE, or run `agent-limits opencodego setup`")]
     OpenCodeGoNotFound,
     #[error("{0}")]
     Other(String),

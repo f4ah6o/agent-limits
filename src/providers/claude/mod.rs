@@ -30,7 +30,7 @@ const REFRESH_SKEW_MS: i64 = 30_000;
 
 pub fn default_user_agent(version: &str) -> String {
     format!(
-        "agent-usage/{} (claude; https://github.com/f4ah6o/agent-usage)",
+        "agent-limits/{} (claude; https://github.com/f4ah6o/agent-usage)",
         version
     )
 }
@@ -157,7 +157,7 @@ impl ClaudeClient {
             "account credential expired (run `claude /login` to refresh)".into()
         } else if msg.contains("refresh endpoint") || msg.contains("broken") {
             format!(
-                "agent-usage: claude: refresh endpoint rejected request ({}); this is likely an agent-usage refresh implementation issue. Run 'claude /login' to work around it.",
+                "agent-limits: claude: refresh endpoint rejected request ({}); this is likely an agent-limits refresh implementation issue. Run 'claude /login' to work around it.",
                 msg
             )
         } else {
@@ -175,7 +175,7 @@ impl Provider for ClaudeClient {
         let live = self.read_live_credential()?;
 
         let stored = self.store.list().unwrap_or_else(|e| {
-            eprintln!("agent-usage: claude: could not read account store ({}); proceeding with live credential only", e);
+            eprintln!("agent-limits: claude: could not read account store ({}); proceeding with live credential only", e);
             vec![]
         });
 

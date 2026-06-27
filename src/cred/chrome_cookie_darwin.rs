@@ -95,7 +95,7 @@ fn derive_aes_key(raw: &[u8]) -> [u8; 16] {
 /// for opencode.ai.
 fn extract_cookie(db_path: &Path, aes_key: &[u8; 16]) -> Option<String> {
     // Copy to temp to avoid "database is locked" if browser is running.
-    let tmp = std::env::temp_dir().join("agent-usage-chrome-cookies.db");
+    let tmp = std::env::temp_dir().join("agent-limits-chrome-cookies.db");
     std::fs::copy(db_path, &tmp).ok()?;
 
     let conn =
@@ -143,7 +143,7 @@ fn decrypt_cookie(encrypted: &[u8], key: &[u8; 16]) -> Option<String> {
 /// visited URLs matching `opencode.ai/workspace/*/go`.
 fn extract_workspace_id_from_history(profile_dir: &Path) -> Option<String> {
     let history_db = profile_dir.join("History");
-    let tmp = std::env::temp_dir().join("agent-usage-chrome-history.db");
+    let tmp = std::env::temp_dir().join("agent-limits-chrome-history.db");
     std::fs::copy(&history_db, &tmp).ok()?;
 
     let conn =

@@ -12,8 +12,8 @@ use cli::usage::{run_usage, UsageArgs};
 
 #[derive(Parser)]
 #[command(
-    name = "agent-usage",
-    about = "agent-usage — read Claude / Codex / OpenCode Go usage limits",
+    name = "agent-limits",
+    about = "agent-limits — read Claude / Codex / OpenCode Go usage limits",
     version = env!("CARGO_PKG_VERSION"),
 )]
 struct Cli {

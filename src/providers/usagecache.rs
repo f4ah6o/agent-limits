@@ -173,7 +173,7 @@ impl Cache {
 
 fn cache_paths(provider: &str) -> Option<(PathBuf, PathBuf)> {
     let base = dirs::cache_dir()?;
-    let dir = base.join("agent-usage").join("usage");
+    let dir = base.join("agent-limits").join("usage");
     std::fs::create_dir_all(&dir).ok()?;
     let path = dir.join(format!("{}-v1.json", provider));
     let lock_path = dir.join(format!("{}.cache.lock", provider));

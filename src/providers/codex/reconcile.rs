@@ -103,7 +103,7 @@ pub fn reconcile(input: ReconcileInput<'_>) -> ReconcileOutput {
         accounts: input.stored.to_vec(),
         active_uuid: String::new(),
         capture_warn: Some(
-            "agent-usage: codex: could not identify live credential; rendering as unstored account"
+            "agent-limits: codex: could not identify live credential; rendering as unstored account"
                 .into(),
         ),
         inserted: false,
