@@ -12,7 +12,6 @@ pub enum ExitStatus {
 }
 
 pub struct RunOptions {
-    pub debug: bool,
     /// True when the caller named a specific provider (e.g. `usage opencodego`).
     /// When false (default bulk run), AuthMissing is treated as a skip so that
     /// unconfigured optional providers do not raise exit code 1.
@@ -87,7 +86,17 @@ pub fn run(
     let providers = Arc::try_unwrap(results).unwrap().into_inner().unwrap();
     let failed = *any_failed.lock().unwrap();
 
-    let status = if failed { ExitStatus::AnyFailed } else { ExitStatus::Ok };
+    let status = if failed {
+        ExitStatus::AnyFailed
+    } else {
+        ExitStatus::Ok
+    };
 
-    (Report { checked_at, providers }, status)
+    (
+        Report {
+            checked_at,
+            providers,
+        },
+        status,
+    )
 }

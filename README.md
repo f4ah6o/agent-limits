@@ -1,111 +1,87 @@
-# aistat
+# agent-usage
 
-Read-only fork for showing **Claude Code** and **Codex** usage limits from one terminal command.
+`agent-usage` reports Claude Code, Codex, and OpenCode Go usage limits from the terminal.
 
-This repository is a fork of [`drogers0/aistat`](https://github.com/drogers0/aistat). The upstream repository is kept as a reference only. Installation, issue tracking, and local changes for this fork should use `f4ah6o/aistat`.
+JSON is the default output. Pass `--human` for a compact text view.
 
-## Scope
+## Install
 
-This fork intentionally narrows the original project.
+From crates.io:
 
-| Area | Status |
-|---|---|
-| Claude usage | kept |
-| Codex usage | kept |
-| Copilot usage | omitted |
-| `aistat switch` | removed from CLI dispatch |
-| `aistat accounts` | removed from CLI dispatch |
-| Persistent multi-account store | not opened by the CLI |
-| Live credential rotation | not exposed |
+```bash
+cargo install agent-usage
+```
 
-The CLI still reads the credential locations that the upstream Claude Code and Codex CLIs already create. It does not provide a login flow.
+From GitHub release binaries with cargo-binstall:
+
+```bash
+cargo binstall agent-usage
+```
 
 ## Usage
 
-```console
-$ aistat -h
-Claude usage
-- personal@example.com [Max 5x]
-  - 5-hour: 92.0% (resets in 4h 53m)
-  - 7-day: 71.0% (resets in 2d 5h)
-  - 7-day sonnet: 58.0% (resets in 2d 5h)
-
-Codex usage
-- 5-hour: 2.0% (resets in 2h 26m)
-- 7-day: 0.0% (resets in 6d 21h)
-- Code review 7-day: 0.0% (resets in 6d 21h)
+```bash
+agent-usage                         # same as `agent-usage usage`
+agent-usage usage                   # report all configured providers
+agent-usage usage claude            # report Claude only
+agent-usage usage codex             # report Codex only
+agent-usage usage opencodego        # report OpenCode Go only
+agent-usage usage --refresh         # bypass the 90 s usage cache
+agent-usage --human usage           # human-readable output
+agent-usage --debug usage codex     # request/debug lines on stderr
 ```
 
-Commands:
+Example:
 
-```bash
-aistat                  # same as `aistat usage`
-aistat usage            # report Claude and Codex usage
-aistat usage claude     # report Claude only
-aistat usage codex      # report Codex only
-aistat usage --human    # human-readable output
-aistat usage --refresh  # bypass usage cache and force a fresh read
-```
-
-Unsupported by design:
-
-```bash
-aistat switch
-aistat accounts
-aistat usage copilot
+```text
+Opencodego usage
+- 5-hour: 0.0% (resets in 5h 0m)
+- 7-day: 53.0% (resets in 1d 21h)
+- Monthly: 100.0% (resets in 6d 4h)
 ```
 
 ## Authentication
 
-| Provider | Existing setup command |
+| Provider | Setup |
 |---|---|
 | Claude | `claude /login` |
 | Codex | `codex login` |
+| OpenCode Go | `agent-usage opencodego setup` on macOS Chrome, or set `OPENCODE_GO_WORKSPACE_ID` and `OPENCODE_GO_AUTH_COOKIE` |
 
-## Installation
+`agent-usage opencodego setup` stores the workspace ID and auth cookie in:
 
-Build from a pinned local checkout:
+```text
+~/Library/Application Support/opencode-bar/opencode-go.json
+```
+
+The file is written with owner-only permissions.
+
+## Release
+
+This project uses CalVer:
+
+```text
+YYYY.M.PATCH
+```
+
+The first Rust-only release is `2026.6.0`.
+
+Release tags use the matching `vYYYY.M.PATCH` format. GitHub release binaries are produced with cargo-dist, and crates.io publishing is intended to use crates.io Trusted Publishing.
+
+## Development
 
 ```bash
-git clone https://github.com/f4ah6o/aistat.git
-cd aistat
-
-git log -1 --oneline
-go build -trimpath -o ~/.local/bin/aistat ./cmd/aistat
-~/.local/bin/aistat --version
+cargo fmt --check
+cargo check --all-targets
+cargo test
+cargo clippy --all-targets -- -D warnings
+cargo publish --dry-run
+dist generate --check
+dist manifest --artifacts=all --output-format=json --no-local-paths
 ```
 
-The module path is `github.com/f4ah6o/aistat/v2`.
-
-## How it works
-
-The CLI constructs only Claude and Codex providers. Each provider receives a per-process memory account store, so the CLI does not open the platform account store used by the original multi-account switching workflow.
-
-Provider endpoints retained from upstream:
-
-| Provider | Endpoint family |
-|---|---|
-| Claude | `api.anthropic.com/api/oauth/usage`, profile/refresh helpers used by the upstream provider implementation |
-| Codex | `chatgpt.com/backend-api/wham/usage`, token refresh helper used by the upstream provider implementation |
-
-The rendered JSON keeps the upstream shape for limits:
-
-```json
-{
-  "checked_at": "2026-05-28T01:00:00+00:00",
-  "providers": {
-    "claude": { "limits": { "five_hour": {} } },
-    "codex": { "limits": { "five_hour": {} } }
-  }
-}
-```
-
-## Upstream reference
-
-Original project: [`drogers0/aistat`](https://github.com/drogers0/aistat)
-
-This fork may continue to read upstream implementation details, but upstream installation scripts, release artifacts, and account-switching workflow are not part of this fork's supported surface.
+Live provider checks require local credentials and may fail when upstream usage endpoints rate-limit.
 
 ## License
 
-[MIT](LICENSE) © 2026 drogers0 and contributors
+[MIT](LICENSE)

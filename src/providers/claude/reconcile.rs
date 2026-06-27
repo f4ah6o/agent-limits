@@ -48,10 +48,9 @@ where
         if stored_access_token_owned(acct) == live.access_token {
             let mut updated = acct.clone();
             updated.last_seen_at = input.now;
-            updated.raw_blob = RawValue::from_string(
-                String::from_utf8_lossy(&live.raw).into_owned(),
-            )
-            .unwrap_or_else(|_| acct.raw_blob.clone());
+            updated.raw_blob =
+                RawValue::from_string(String::from_utf8_lossy(&live.raw).into_owned())
+                    .unwrap_or_else(|_| acct.raw_blob.clone());
 
             let mut accounts = input.stored.to_vec();
             // Update the matched account
@@ -66,7 +65,7 @@ where
                 capture_warn: None,
                 inserted: false,
                 upserted: true,
-            live_unstored: None,
+                live_unstored: None,
             };
         }
     }
@@ -77,10 +76,8 @@ where
             let mut accounts = input.stored.to_vec();
             let existing = accounts.iter_mut().find(|a| a.uuid == profile.account_uuid);
 
-            let raw_blob = RawValue::from_string(
-                String::from_utf8_lossy(&live.raw).into_owned(),
-            )
-            .unwrap_or_else(|_| serde_json::value::RawValue::from_string("{}".into()).unwrap());
+            let raw_blob = RawValue::from_string(String::from_utf8_lossy(&live.raw).into_owned())
+                .unwrap_or_else(|_| serde_json::value::RawValue::from_string("{}".into()).unwrap());
 
             let (inserted, upserted) = if let Some(acct) = existing {
                 acct.email = profile.email.clone();
@@ -117,7 +114,7 @@ where
                 accounts: input.stored.to_vec(),
                 active_uuid: String::new(),
                 capture_warn: Some(
-                    "aistat: claude: could not identify live credential via profile endpoint; rendering as unstored account".into(),
+                    "agent-usage: claude: could not identify live credential via profile endpoint; rendering as unstored account".into(),
                 ),
                 inserted: false,
                 upserted: false,

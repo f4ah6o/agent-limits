@@ -2,12 +2,8 @@ use super::{AccountResult, Limit, ProviderError};
 use chrono::{DateTime, Utc};
 use std::collections::BTreeMap;
 
-pub fn sort_account_results(accounts: &mut Vec<AccountResult>) {
-    accounts.sort_by(|a, b| {
-        b.active
-            .cmp(&a.active)
-            .then_with(|| a.email.cmp(&b.email))
-    });
+pub fn sort_account_results(accounts: &mut [AccountResult]) {
+    accounts.sort_by(|a, b| b.active.cmp(&a.active).then_with(|| a.email.cmp(&b.email)));
 }
 
 /// Records a fetch outcome into ar. Returns (success, is_transient).

@@ -25,10 +25,4 @@ impl Store for MemoryStore {
         guard.insert(account.uuid.clone(), account);
         Ok(())
     }
-
-    fn delete(&self, uuid: &str) -> Result<(), String> {
-        let mut guard = self.accounts.lock().unwrap();
-        guard.remove(uuid);
-        Ok(())
-    }
 }

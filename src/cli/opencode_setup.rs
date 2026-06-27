@@ -63,7 +63,10 @@ pub fn run_setup(args: SetupArgs) -> i32 {
 fn create_dir_private(dir: &std::path::Path) -> std::io::Result<()> {
     #[cfg(unix)]
     {
-        fs::DirBuilder::new().recursive(true).mode(0o700).create(dir)
+        fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(dir)
     }
     #[cfg(not(unix))]
     {

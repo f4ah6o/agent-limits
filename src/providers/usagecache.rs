@@ -42,7 +42,15 @@ impl Cache {
 
         let (path, lock_path) = match cache_paths(provider) {
             Some(p) => p,
-            None => return Self { provider: provider.into(), ttl: Duration::from_secs(ttl_secs), disabled: true, path: None, lock_path: None },
+            None => {
+                return Self {
+                    provider: provider.into(),
+                    ttl: Duration::from_secs(ttl_secs),
+                    disabled: true,
+                    path: None,
+                    lock_path: None,
+                }
+            }
         };
 
         Self {
@@ -64,11 +72,11 @@ impl Cache {
         // Shared lock
         let lock = std::fs::OpenOptions::new()
             .create(true)
+            .truncate(false)
             .write(true)
             .open(lock_path)
             .ok()?;
-        use fs2::FileExt;
-        lock.lock_shared().ok()?;
+        fs2::FileExt::lock_shared(&lock).ok()?;
 
         let data = std::fs::read(path).ok()?;
         let cache: CacheFile = serde_json::from_slice(&data).ok()?;
@@ -109,14 +117,14 @@ impl Cache {
         // Exclusive lock
         let lock = match std::fs::OpenOptions::new()
             .create(true)
+            .truncate(false)
             .write(true)
             .open(lock_path)
         {
             Ok(f) => f,
             Err(_) => return,
         };
-        use fs2::FileExt;
-        if lock.lock_exclusive().is_err() {
+        if fs2::FileExt::lock_exclusive(&lock).is_err() {
             return;
         }
 
@@ -150,7 +158,11 @@ impl Cache {
 
         if let Ok(data) = serde_json::to_vec(&cache) {
             if let Some(dir) = path.parent() {
-                let tmp = dir.join(format!(".{}-cache-tmp-{}", self.provider, std::process::id()));
+                let tmp = dir.join(format!(
+                    ".{}-cache-tmp-{}",
+                    self.provider,
+                    std::process::id()
+                ));
                 if std::fs::write(&tmp, &data).is_ok() {
                     let _ = std::fs::rename(&tmp, path);
                 }
@@ -161,7 +173,7 @@ impl Cache {
 
 fn cache_paths(provider: &str) -> Option<(PathBuf, PathBuf)> {
     let base = dirs::cache_dir()?;
-    let dir = base.join("aistat").join("usage");
+    let dir = base.join("agent-usage").join("usage");
     std::fs::create_dir_all(&dir).ok()?;
     let path = dir.join(format!("{}-v1.json", provider));
     let lock_path = dir.join(format!("{}.cache.lock", provider));

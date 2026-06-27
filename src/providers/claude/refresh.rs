@@ -38,16 +38,14 @@ impl RefreshClient {
             ("client_id", CLIENT_ID),
         ];
         let resp: TokenResp = self.doer.post(REFRESH_ENDPOINT, &form, TIMEOUT_SECS)?;
-        let access_token = resp
-            .access_token
-            .filter(|t| !t.is_empty())
-            .ok_or_else(|| {
-                ProviderError::Other("refresh endpoint returned non-OAuth response".into())
-            })?;
+        let access_token = resp.access_token.filter(|t| !t.is_empty()).ok_or_else(|| {
+            ProviderError::Other("refresh endpoint returned non-OAuth response".into())
+        })?;
         let new_refresh = resp.refresh_token.unwrap_or(refresh_token);
-        let expires_at = resp.expires_in.map(|secs| {
-            Utc::now().timestamp_millis() + secs * 1000
-        }).unwrap_or(0);
+        let expires_at = resp
+            .expires_in
+            .map(|secs| Utc::now().timestamp_millis() + secs * 1000)
+            .unwrap_or(0);
         Ok(Token {
             access_token,
             refresh_token: new_refresh,

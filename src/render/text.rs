@@ -10,20 +10,46 @@ struct LabelEntry {
 fn text_labels(provider_id: &str) -> &'static [LabelEntry] {
     match provider_id {
         "claude" => &[
-            LabelEntry { key: "five_hour", label: "5-hour" },
-            LabelEntry { key: "seven_day", label: "7-day" },
-            LabelEntry { key: "seven_day_sonnet", label: "7-day sonnet" },
+            LabelEntry {
+                key: "five_hour",
+                label: "5-hour",
+            },
+            LabelEntry {
+                key: "seven_day",
+                label: "7-day",
+            },
+            LabelEntry {
+                key: "seven_day_sonnet",
+                label: "7-day sonnet",
+            },
         ],
         "codex" => &[
-            LabelEntry { key: "five_hour", label: "5-hour" },
-            LabelEntry { key: "seven_day", label: "7-day" },
-            LabelEntry { key: "code_review_seven_day", label: "Code review 7-day" },
+            LabelEntry {
+                key: "five_hour",
+                label: "5-hour",
+            },
+            LabelEntry {
+                key: "seven_day",
+                label: "7-day",
+            },
+            LabelEntry {
+                key: "code_review_seven_day",
+                label: "Code review 7-day",
+            },
         ],
-        "copilot" => &[LabelEntry { key: "month", label: "month" }],
         "opencodego" => &[
-            LabelEntry { key: "five_hour", label: "5-hour" },
-            LabelEntry { key: "seven_day", label: "7-day" },
-            LabelEntry { key: "monthly", label: "Monthly" },
+            LabelEntry {
+                key: "five_hour",
+                label: "5-hour",
+            },
+            LabelEntry {
+                key: "seven_day",
+                label: "7-day",
+            },
+            LabelEntry {
+                key: "monthly",
+                label: "Monthly",
+            },
         ],
         _ => &[],
     }
@@ -77,18 +103,17 @@ fn render_limits_section(
             lines.push(format_limit_line(entry.label, limit));
         }
     }
-    let mut unknown: Vec<&String> = limits.keys().filter(|k| !seen.contains(k.as_str())).collect();
+    let mut unknown: Vec<&String> = limits
+        .keys()
+        .filter(|k| !seen.contains(k.as_str()))
+        .collect();
     unknown.sort();
     for k in unknown {
         lines.push(format_limit_line(k, &limits[k]));
     }
 }
 
-fn render_accounts_section(
-    title: &str,
-    provider_id: &str,
-    accts: &[AccountResult],
-) -> String {
+fn render_accounts_section(title: &str, provider_id: &str, accts: &[AccountResult]) -> String {
     let mut lines = vec![title.to_string()];
     for ar in accts {
         let mut header = format!("- {}", ar.email);
@@ -115,7 +140,8 @@ fn render_accounts_section(
                     lines.push(format!("  {}", format_limit_line(entry.label, limit)));
                 }
             }
-            let mut unknown: Vec<&String> = lims.keys().filter(|k| !seen.contains(k.as_str())).collect();
+            let mut unknown: Vec<&String> =
+                lims.keys().filter(|k| !seen.contains(k.as_str())).collect();
             unknown.sort();
             for k in unknown {
                 lines.push(format!("  {}", format_limit_line(k, &lims[k])));
@@ -163,5 +189,5 @@ pub fn render_text<W: Write>(
     if sections.is_empty() {
         return Ok(());
     }
-    write!(w, "{}\n", sections.join("\n\n"))
+    writeln!(w, "{}", sections.join("\n\n"))
 }

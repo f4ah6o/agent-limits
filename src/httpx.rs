@@ -1,6 +1,8 @@
 use crate::providers::{classify::default_classify, ProviderError};
 use std::time::{Duration, Instant};
 
+pub type DebugFn = Box<dyn Fn(&str) + Send + Sync>;
+
 fn retry_after_from_resp(resp: &ureq::http::Response<ureq::Body>) -> Option<Duration> {
     let val = resp.headers().get("retry-after")?.to_str().ok()?;
     val.parse::<u64>().ok().map(Duration::from_secs)
@@ -49,7 +51,7 @@ pub struct Doer {
     pub user_agent: String,
     pub provider_id: String,
     pub extra_headers: Vec<(String, String)>,
-    pub debug: Option<Box<dyn Fn(&str) + Send + Sync>>,
+    pub debug: Option<DebugFn>,
 }
 
 impl Doer {
@@ -57,7 +59,7 @@ impl Doer {
         user_agent: impl Into<String>,
         provider_id: impl Into<String>,
         extra_headers: Vec<(String, String)>,
-        debug: Option<Box<dyn Fn(&str) + Send + Sync>>,
+        debug: Option<DebugFn>,
     ) -> Self {
         // http_status_as_error(false) so we can read the body on non-200 responses
         let agent = ureq::Agent::config_builder()
@@ -133,11 +135,7 @@ impl Doer {
                 }
             }
 
-            let result = req
-                .config()
-                .timeout_global(Some(timeout))
-                .build()
-                .call();
+            let result = req.config().timeout_global(Some(timeout)).build().call();
 
             let elapsed = start.elapsed();
             match result {

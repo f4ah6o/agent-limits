@@ -1,7 +1,8 @@
-use crate::providers::{Provider, ProviderOutput, ProviderError};
+use crate::httpx::DebugFn;
 use crate::providers::claude::ClaudeClient;
 use crate::providers::codex::CodexClient;
 use crate::providers::opencode_go::OpenCodeGoClient;
+use crate::providers::{Provider, ProviderError, ProviderOutput};
 
 pub fn resolved_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
@@ -10,7 +11,7 @@ pub fn resolved_version() -> &'static str {
 /// Builds the live provider set. Claude + Codex with MemoryStore.
 pub fn real_providers(cache_bypass: bool, debug: bool) -> Vec<Box<dyn Provider>> {
     let v = resolved_version();
-    let make_debug = |prefix: &'static str| -> Option<Box<dyn Fn(&str) + Send + Sync>> {
+    let make_debug = |prefix: &'static str| -> Option<DebugFn> {
         if debug {
             Some(Box::new(move |s: &str| eprint!("{}{}", prefix, s)))
         } else {
@@ -67,7 +68,12 @@ impl Provider for SingleAccountProvider {
             .cloned();
 
         if let Some(acct) = selected {
-            if acct.error.as_deref().map(|e| !e.is_empty()).unwrap_or(false) {
+            if acct
+                .error
+                .as_deref()
+                .map(|e| !e.is_empty())
+                .unwrap_or(false)
+            {
                 let msg = acct.error.unwrap();
                 return Err(ProviderError::Other(msg));
             }
@@ -76,7 +82,10 @@ impl Provider for SingleAccountProvider {
                 accounts: vec![],
             })
         } else {
-            Ok(ProviderOutput { limits: None, accounts: vec![] })
+            Ok(ProviderOutput {
+                limits: None,
+                accounts: vec![],
+            })
         }
     }
 }

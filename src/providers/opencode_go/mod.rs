@@ -1,5 +1,6 @@
 use super::{Limit, Provider, ProviderError, ProviderOutput, ISSUE_TRACKER_URL};
 use crate::cred;
+use crate::httpx::DebugFn;
 use chrono::Utc;
 use regex::Regex;
 use std::collections::BTreeMap;
@@ -9,11 +10,12 @@ use std::time::Duration;
 const DASHBOARD_URL_TEMPLATE: &str = "https://opencode.ai/workspace/{}/go";
 const FETCH_TIMEOUT_SECS: u64 = 10;
 
-type DebugFn = Option<Box<dyn Fn(&str) + Send + Sync>>;
-
 pub fn default_user_agent(version: &str) -> String {
     std::env::var("AISTAT_OPENCODEGO_USER_AGENT").unwrap_or_else(|_| {
-        format!("agent-usage/{} (opencodego; https://github.com/f4ah6o/aistat)", version)
+        format!(
+            "agent-usage/{} (opencodego; https://github.com/f4ah6o/agent-usage)",
+            version
+        )
     })
 }
 
@@ -46,14 +48,11 @@ fn window_key(name: &str) -> &'static str {
 
 pub struct OpenCodeGoClient {
     user_agent: String,
-    debug: DebugFn,
+    debug: Option<DebugFn>,
 }
 
 impl OpenCodeGoClient {
-    pub fn new(
-        user_agent: String,
-        debug: DebugFn,
-    ) -> Self {
+    pub fn new(user_agent: String, debug: Option<DebugFn>) -> Self {
         Self { user_agent, debug }
     }
 
@@ -74,11 +73,9 @@ impl Provider for OpenCodeGoClient {
     }
 
     fn fetch(&self) -> Result<ProviderOutput, ProviderError> {
-        let (ws_id, cookie) = cred::opencode::read_opencode_config().map_err(|e| {
-            match e {
-                cred::CredError::OpenCodeGoNotFound => ProviderError::AuthMissing(e.to_string()),
-                _ => ProviderError::Other(e.to_string()),
-            }
+        let (ws_id, cookie) = cred::opencode::read_opencode_config().map_err(|e| match e {
+            cred::CredError::OpenCodeGoNotFound => ProviderError::AuthMissing(e.to_string()),
+            _ => ProviderError::Other(e.to_string()),
         })?;
 
         let url = DASHBOARD_URL_TEMPLATE.replacen("{}", &ws_id, 1);
@@ -106,7 +103,8 @@ impl Provider for OpenCodeGoClient {
                         code, url
                     ))),
                     429 | 500..=599 => Err(ProviderError::Transient(format!(
-                        "HTTP {} from {}", code, url
+                        "HTTP {} from {}",
+                        code, url
                     ))),
                     _ => Err(ProviderError::Other(format!(
                         "HTTP {} from {} — please file an issue at {}",
@@ -139,11 +137,7 @@ fn parse_dashboard(body: &str) -> Result<BTreeMap<String, Limit>, ProviderError>
     let mut limits = BTreeMap::new();
 
     for cap in re_window_block().captures_iter(body) {
-        let window_name = cap
-            .get(1)
-            .or_else(|| cap.get(2))
-            .unwrap()
-            .as_str();
+        let window_name = cap.get(1).or_else(|| cap.get(2)).unwrap().as_str();
         let block = cap.get(3).unwrap().as_str();
 
         let used_pct = match re_usage_pct().captures(block) {

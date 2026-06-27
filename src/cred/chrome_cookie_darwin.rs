@@ -6,7 +6,7 @@
 ///   iv   = b' ' * 16
 ///   data = AES-128-CBC-decrypt(cookie_encrypted_value[3:], key, iv)
 ///          (strip 3-byte "v10" prefix before decrypting)
-use aes::cipher::{BlockDecryptMut, KeyIvInit, block_padding::Pkcs7};
+use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
 use pbkdf2::pbkdf2_hmac;
 use sha1::Sha1;
 use std::path::Path;
@@ -98,11 +98,9 @@ fn extract_cookie(db_path: &Path, aes_key: &[u8; 16]) -> Option<String> {
     let tmp = std::env::temp_dir().join("agent-usage-chrome-cookies.db");
     std::fs::copy(db_path, &tmp).ok()?;
 
-    let conn = rusqlite::Connection::open_with_flags(
-        &tmp,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )
-    .ok()?;
+    let conn =
+        rusqlite::Connection::open_with_flags(&tmp, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .ok()?;
 
     // Column name differs between Chromium versions: encrypted_value (older)
     // or encrypted_value (current). The schema is stable; we select by name.
@@ -115,9 +113,7 @@ fn extract_cookie(db_path: &Path, aes_key: &[u8; 16]) -> Option<String> {
         )
         .ok()?;
 
-    let encrypted: Vec<u8> = stmt
-        .query_row([], |row| row.get(0))
-        .ok()?;
+    let encrypted: Vec<u8> = stmt.query_row([], |row| row.get(0)).ok()?;
 
     let _ = std::fs::remove_file(&tmp);
 
@@ -150,11 +146,9 @@ fn extract_workspace_id_from_history(profile_dir: &Path) -> Option<String> {
     let tmp = std::env::temp_dir().join("agent-usage-chrome-history.db");
     std::fs::copy(&history_db, &tmp).ok()?;
 
-    let conn = rusqlite::Connection::open_with_flags(
-        &tmp,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )
-    .ok()?;
+    let conn =
+        rusqlite::Connection::open_with_flags(&tmp, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .ok()?;
 
     let mut stmt = conn
         .prepare(

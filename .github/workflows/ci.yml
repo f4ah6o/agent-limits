@@ -14,39 +14,35 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          go-version: '1.22.x'
-          cache: true
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
 
-      - name: Verify fork module path
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(go list -m)" = "github.com/f4ah6o/aistat/v2"
-          if git grep -n 'github.com/f4ah6o/aistat/v2' -- '*.go' 'go.mod' 'README.md' '.goreleaser.yaml' '.github/workflows/*.yml'; then
-            echo 'old upstream Go module path remains' >&2
-            exit 1
-          fi
+      - name: Format
+        run: cargo fmt --check
 
-      - name: Build CLI
-        run: go build -trimpath ./cmd/aistat
+      - name: Check
+        run: cargo check --all-targets
 
-      - name: go vet
-        run: go vet ./...
+      - name: Test
+        run: cargo test
 
-      - name: go test
-        run: go test -race ./...
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
 
-  fake-build:
+      - name: Publish dry run
+        run: cargo publish --dry-run
+
+  dist-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.22.x'
-          cache: true
-      - name: Build fake-tag CLI
-        run: go build -trimpath -tags=fake ./cmd/aistat
-      - name: Test fake-tag packages
-        run: go test -race -tags=fake ./...
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-dist
+        run: cargo install cargo-dist --locked --version 0.32.0
+      - name: Check generated cargo-dist workflow
+        run: dist generate --check
+      - name: Check cargo-dist manifest
+        run: dist manifest --artifacts=all --output-format=json --no-local-paths

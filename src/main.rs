@@ -75,13 +75,28 @@ fn main() {
     let human = cli.human;
 
     let code = match cli.command {
-        Some(Commands::Usage { provider, refresh }) => {
-            run_usage(UsageArgs { provider, refresh, human, debug: cli.debug })
-        }
+        Some(Commands::Usage { provider, refresh }) => run_usage(UsageArgs {
+            provider,
+            refresh,
+            human,
+            debug: cli.debug,
+        }),
         Some(Commands::OpenCodeGo {
-            action: OpenCodeGoAction::Setup { workspace_id, auth_cookie },
-        }) => run_setup(SetupArgs { workspace_id, auth_cookie }),
-        None => run_usage(UsageArgs { provider: None, refresh: false, human, debug: cli.debug }),
+            action:
+                OpenCodeGoAction::Setup {
+                    workspace_id,
+                    auth_cookie,
+                },
+        }) => run_setup(SetupArgs {
+            workspace_id,
+            auth_cookie,
+        }),
+        None => run_usage(UsageArgs {
+            provider: None,
+            refresh: false,
+            human,
+            debug: cli.debug,
+        }),
     };
 
     std::process::exit(code);

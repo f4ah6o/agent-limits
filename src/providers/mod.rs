@@ -1,7 +1,6 @@
 pub mod classify;
 pub mod claude;
 pub mod codex;
-pub mod copilot;
 pub mod multiaccount;
 pub mod opencode_go;
 pub mod usagecache;
@@ -15,8 +14,7 @@ pub const ISO8601_FMT: &str = "%Y-%m-%dT%H:%M:%S%:z";
 
 pub const KNOWN_PROVIDER_IDS: &[&str] = &["claude", "codex", "opencodego"];
 
-pub const PROJECT_URL: &str = "https://github.com/f4ah6o/aistat";
-pub const ISSUE_TRACKER_URL: &str = "https://github.com/f4ah6o/aistat/issues";
+pub const ISSUE_TRACKER_URL: &str = "https://github.com/f4ah6o/agent-usage/issues";
 
 pub fn provider_title(id: &str) -> String {
     let mut c = id.chars();
@@ -45,9 +43,6 @@ impl ProviderError {
     pub fn is_auth_denied(&self) -> bool {
         matches!(self, ProviderError::AuthDenied(_))
     }
-    pub fn is_auth_missing(&self) -> bool {
-        matches!(self, ProviderError::AuthMissing(_))
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -68,10 +63,7 @@ impl Serialize for Limit {
         let mut map = s.serialize_map(Some(4))?;
         map.serialize_entry("used_percent", &round_pct(self.used_percent))?;
         map.serialize_entry("remaining_percent", &round_pct(self.remaining_percent))?;
-        map.serialize_entry(
-            "resets_at",
-            &self.resets_at.format(ISO8601_FMT).to_string(),
-        )?;
+        map.serialize_entry("resets_at", &self.resets_at.format(ISO8601_FMT).to_string())?;
         map.serialize_entry("reset_after_seconds", &self.reset_after_seconds)?;
         map.end()
     }
@@ -86,7 +78,6 @@ pub struct ProviderOutput {
 #[derive(Debug, Clone)]
 pub struct AccountResult {
     pub email: String,
-    pub uuid: String,
     pub plan: String,
     pub active: bool,
     pub limits: Option<BTreeMap<String, Limit>>,
@@ -96,7 +87,11 @@ pub struct AccountResult {
 impl Serialize for AccountResult {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeMap;
-        let error_present = self.error.as_deref().map(|e| !e.is_empty()).unwrap_or(false);
+        let error_present = self
+            .error
+            .as_deref()
+            .map(|e| !e.is_empty())
+            .unwrap_or(false);
         let n = 4 + if error_present { 1 } else { 0 };
         let mut map = s.serialize_map(Some(n))?;
         map.serialize_entry("email", &self.email)?;
@@ -120,7 +115,11 @@ pub struct ProviderResult {
 impl Serialize for ProviderResult {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         use serde::ser::SerializeMap;
-        let error_present = self.error.as_deref().map(|e| !e.is_empty()).unwrap_or(false);
+        let error_present = self
+            .error
+            .as_deref()
+            .map(|e| !e.is_empty())
+            .unwrap_or(false);
         if !self.accounts.is_empty() {
             let n = 1 + if error_present { 1 } else { 0 };
             let mut map = s.serialize_map(Some(n))?;

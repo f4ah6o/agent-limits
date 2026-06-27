@@ -1,11 +1,26 @@
+[package]
+name = "agent-usage"
+version = "2026.6.0"
+edition = "2021"
+rust-version = "1.85"
+description = "Monitor Claude, Codex, and OpenCode Go usage limits from the terminal"
+license = "MIT"
+repository = "https://github.com/f4ah6o/agent-usage"
+homepage = "https://github.com/f4ah6o/agent-usage"
+readme = "README.md"
+keywords = ["cli", "claude", "codex", "opencode", "usage"]
+categories = ["command-line-utilities"]
+include = [
+    "src/**",
+    "Cargo.toml",
+    "Cargo.lock",
+    "README.md",
+    "LICENSE",
+]
+
 [[bin]]
 name = "agent-usage"
 path = "src/main.rs"
-
-[package]
-name = "agent-usage"
-version = "0.1.0"
-edition = "2021"
 
 [dependencies]
 ureq = { version = "3", features = ["json"] }
@@ -25,5 +40,28 @@ pbkdf2 = "0.12"
 sha1 = "0.10"
 hmac = "0.12"
 
-[features]
-fake = []
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.tar.xz"
+bin-dir = "{ bin }"
+pkg-fmt = "txz"
+
+# Config for 'dist'
+[workspace.metadata.dist]
+dist-version = "0.32.0"
+# CI backends to support
+ci = "github"
+# The installers to generate for each app
+installers = ["shell"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.32.0"
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"
+# Whether to install an updater program
+install-updater = false
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

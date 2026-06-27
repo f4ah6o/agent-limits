@@ -37,7 +37,9 @@ impl RefreshClient {
             ("refresh_token", refresh_token.as_str()),
             ("client_id", CLIENT_ID),
         ];
-        let resp: TokenResp = self.doer.post(REFRESH_ENDPOINT, &form, TIMEOUT_SECS)
+        let resp: TokenResp = self
+            .doer
+            .post(REFRESH_ENDPOINT, &form, TIMEOUT_SECS)
             .map_err(|e| {
                 // Map invalid_grant specifically
                 let msg = e.to_string();
@@ -52,12 +54,9 @@ impl RefreshClient {
             return Err(ProviderError::AuthDenied(format!("refresh error: {}", err)));
         }
 
-        let access_token = resp
-            .access_token
-            .filter(|t| !t.is_empty())
-            .ok_or_else(|| {
-                ProviderError::Other("refresh endpoint returned non-OAuth response".into())
-            })?;
+        let access_token = resp.access_token.filter(|t| !t.is_empty()).ok_or_else(|| {
+            ProviderError::Other("refresh endpoint returned non-OAuth response".into())
+        })?;
 
         Ok(Token {
             access_token,

@@ -1,4 +1,4 @@
-use super::{Credential, CredError};
+use super::{CredError, Credential};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -11,10 +11,6 @@ struct ClaudeCred {
 struct ClaudeOAuth {
     #[serde(rename = "accessToken")]
     access_token: Option<String>,
-    #[serde(rename = "refreshToken")]
-    refresh_token: Option<String>,
-    #[serde(rename = "expiresAt")]
-    expires_at: Option<i64>,
 }
 
 pub fn parse_claude_cred(data: &[u8]) -> Result<Credential, CredError> {
@@ -27,8 +23,6 @@ pub fn parse_claude_cred(data: &[u8]) -> Result<Credential, CredError> {
         .ok_or(CredError::ClaudeNotFound)?;
     Ok(Credential {
         access_token,
-        refresh_token: raw.claude_ai_oauth.refresh_token.unwrap_or_default(),
-        expires_at: raw.claude_ai_oauth.expires_at.unwrap_or(0),
         raw: data.to_vec(),
     })
 }
@@ -46,24 +40,6 @@ pub fn read_claude_credential() -> Result<Credential, CredError> {
     {
         Err(CredError::Other(
             "reading Claude credential not supported on this platform".into(),
-        ))
-    }
-}
-
-pub fn write_claude_live_blob(raw_blob: &[u8]) -> Result<(), CredError> {
-    #[cfg(target_os = "macos")]
-    {
-        super::keychain_darwin::write_claude_live_blob(raw_blob)
-    }
-    #[cfg(target_os = "linux")]
-    {
-        super::keychain_linux::write_claude_live_blob(raw_blob)
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    {
-        let _ = raw_blob;
-        Err(CredError::Other(
-            "writing Claude live credential is not supported on this platform".into(),
         ))
     }
 }

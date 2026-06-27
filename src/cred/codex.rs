@@ -1,4 +1,4 @@
-use super::{Credential, CredError};
+use super::{CredError, Credential};
 use serde::Deserialize;
 use std::path::PathBuf;
 
@@ -10,7 +10,6 @@ struct CodexAuth {
 #[derive(Deserialize)]
 struct CodexTokens {
     access_token: Option<String>,
-    refresh_token: Option<String>,
     id_token: Option<String>,
 }
 
@@ -34,8 +33,6 @@ pub fn parse_codex_cred(data: &[u8]) -> Result<Credential, CredError> {
         .ok_or(CredError::CodexNotFound)?;
     Ok(Credential {
         access_token,
-        refresh_token: raw.tokens.refresh_token.unwrap_or_default(),
-        expires_at: 0, // decoded from JWT on demand
         raw: data.to_vec(),
     })
 }
@@ -50,25 +47,6 @@ pub fn read_codex_credential() -> Result<Credential, CredError> {
         }
     })?;
     parse_codex_cred(&data)
-}
-
-pub fn write_codex_live_blob(raw_blob: &[u8]) -> Result<(), CredError> {
-    let path = codex_auth_path()?;
-    let dir = path.parent().unwrap();
-    std::fs::create_dir_all(dir)
-        .map_err(|e| CredError::Other(format!("creating codex auth directory: {e}")))?;
-
-    let tmp_path = dir.join(format!(".auth-{}.json", std::process::id()));
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::write(&tmp_path, raw_blob)
-            .map_err(|e| CredError::Other(format!("writing codex auth file: {e}")))?;
-        std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o600))
-            .map_err(|e| CredError::Other(format!("setting codex auth file mode: {e}")))?;
-    }
-    std::fs::rename(&tmp_path, &path)
-        .map_err(|e| CredError::Other(format!("installing codex auth file: {e}")))?;
-    Ok(())
 }
 
 /// Extract the id_token string from the raw codex auth.json blob.
