@@ -75,7 +75,7 @@ For crates.io Trusted Publishing, configure the `agent-limits` crate with:
 ```text
 Publisher: GitHub Actions
 Repository owner: f4ah6o
-Repository name: agent-usage
+Repository name: agent-limits
 Workflow filename: publish.yml
 Environment name: <empty>
 ```
