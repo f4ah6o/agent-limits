@@ -55,6 +55,7 @@ fn create_dir_private(dir: &std::path::Path) -> std::io::Result<()> {
 }
 
 /// Write bytes to a file with mode 0600 on Unix (owner-read/write only).
+/// Handles both new files and pre-existing files with wrong permissions.
 fn write_private(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
     #[cfg(unix)]
     let mut f = OpenOptions::new()
@@ -69,5 +70,14 @@ fn write_private(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
         .create(true)
         .truncate(true)
         .open(path)?;
+
+    // Fix permissions on the open file so pre-existing files with wrong
+    // modes (e.g. 0644 created by an earlier version) are tightened too.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        f.set_permissions(std::fs::Permissions::from_mode(0o600))?;
+    }
+
     f.write_all(data)
 }

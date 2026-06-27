@@ -13,13 +13,18 @@ pub enum ExitStatus {
 
 pub struct RunOptions {
     pub debug: bool,
+    /// True when the caller named a specific provider (e.g. `usage opencodego`).
+    /// When false (default bulk run), AuthMissing is treated as a skip so that
+    /// unconfigured optional providers do not raise exit code 1.
+    pub explicit_request: bool,
 }
 
 pub fn run(
     requested: &[&str],
     all: &[Box<dyn Provider>],
-    _opts: RunOptions,
+    opts: RunOptions,
 ) -> (Report, ExitStatus) {
+    let explicit_request = opts.explicit_request;
     let by_id: std::collections::HashMap<&str, &dyn Provider> =
         all.iter().map(|p| (p.id(), p.as_ref())).collect();
 
@@ -45,6 +50,7 @@ pub fn run(
                 let id = id.to_string();
 
                 s.spawn(move || {
+                    let explicit_request = explicit_request;
                     let result = provider.fetch();
 
                     let pr = match result {
@@ -54,11 +60,13 @@ pub fn run(
                             error: None,
                         },
                         Err(e) => {
-                            // AuthMissing means the provider is not configured; treat
-                            // it as an intentional skip in bulk runs so that users who
-                            // haven't set up OpenCode Go don't get exit code 1 from
-                            // the default `agent-usage usage` command.
-                            if !matches!(e, ProviderError::AuthMissing(_)) {
+                            // In bulk (non-explicit) runs, AuthMissing means the
+                            // provider is simply not configured — treat it as a skip
+                            // so unconfigured optional providers don't raise exit 1.
+                            // Explicit `usage <provider>` requests always set the flag.
+                            let suppress = !explicit_request
+                                && matches!(e, ProviderError::AuthMissing(_));
+                            if !suppress {
                                 *any_failed.lock().unwrap() = true;
                             }
                             ProviderResult {
