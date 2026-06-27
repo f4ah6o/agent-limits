@@ -32,7 +32,7 @@ pub fn run_usage(args: UsageArgs) -> i32 {
     let (report, status) = run(
         &requested,
         &providers,
-        RunOptions { debug: args.debug },
+        RunOptions { debug: args.debug, explicit_request: args.provider.is_some() },
     );
 
     let stdout = io::stdout();

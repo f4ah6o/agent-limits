@@ -3,6 +3,7 @@ pub mod claude;
 pub mod codex;
 pub mod copilot;
 pub mod multiaccount;
+pub mod opencode_go;
 pub mod usagecache;
 
 use chrono::{DateTime, Utc};
@@ -12,7 +13,7 @@ use thiserror::Error;
 
 pub const ISO8601_FMT: &str = "%Y-%m-%dT%H:%M:%S%:z";
 
-pub const KNOWN_PROVIDER_IDS: &[&str] = &["claude", "codex"];
+pub const KNOWN_PROVIDER_IDS: &[&str] = &["claude", "codex", "opencodego"];
 
 pub const PROJECT_URL: &str = "https://github.com/f4ah6o/aistat";
 pub const ISSUE_TRACKER_URL: &str = "https://github.com/f4ah6o/aistat/issues";
@@ -161,4 +162,10 @@ impl Serialize for Report {
 pub trait Provider: Send + Sync {
     fn id(&self) -> &str;
     fn fetch(&self) -> Result<ProviderOutput, ProviderError>;
+    /// Optional providers are not expected to be configured by every user.
+    /// In bulk/default runs, AuthMissing from an optional provider is treated
+    /// as a skip rather than a failure (exit code stays 0).
+    fn is_optional(&self) -> bool {
+        false
+    }
 }
