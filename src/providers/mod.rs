@@ -162,4 +162,10 @@ impl Serialize for Report {
 pub trait Provider: Send + Sync {
     fn id(&self) -> &str;
     fn fetch(&self) -> Result<ProviderOutput, ProviderError>;
+    /// Optional providers are not expected to be configured by every user.
+    /// In bulk/default runs, AuthMissing from an optional provider is treated
+    /// as a skip rather than a failure (exit code stays 0).
+    fn is_optional(&self) -> bool {
+        false
+    }
 }

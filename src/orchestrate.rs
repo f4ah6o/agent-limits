@@ -49,8 +49,8 @@ pub fn run(
                 let any_failed = Arc::clone(&any_failed);
                 let id = id.to_string();
 
+                let is_optional = provider.is_optional();
                 s.spawn(move || {
-                    let explicit_request = explicit_request;
                     let result = provider.fetch();
 
                     let pr = match result {
@@ -60,11 +60,13 @@ pub fn run(
                             error: None,
                         },
                         Err(e) => {
-                            // In bulk (non-explicit) runs, AuthMissing means the
-                            // provider is simply not configured — treat it as a skip
-                            // so unconfigured optional providers don't raise exit 1.
-                            // Explicit `usage <provider>` requests always set the flag.
+                            // In bulk (non-explicit) runs, AuthMissing from an optional
+                            // provider (e.g. opencodego) is treated as a skip so users
+                            // who haven't set it up don't get exit 1 from `agent-usage`.
+                            // Claude/Codex are not optional, so their AuthMissing always
+                            // sets the flag. Explicit provider requests always set it too.
                             let suppress = !explicit_request
+                                && is_optional
                                 && matches!(e, ProviderError::AuthMissing(_));
                             if !suppress {
                                 *any_failed.lock().unwrap() = true;

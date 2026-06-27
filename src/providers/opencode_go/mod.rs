@@ -69,6 +69,10 @@ impl Provider for OpenCodeGoClient {
         "opencodego"
     }
 
+    fn is_optional(&self) -> bool {
+        true
+    }
+
     fn fetch(&self) -> Result<ProviderOutput, ProviderError> {
         let (ws_id, cookie) = cred::opencode::read_opencode_config().map_err(|e| {
             match e {
