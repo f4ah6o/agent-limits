@@ -20,8 +20,8 @@ dist manifest --artifacts=all --output-format=json --no-local-paths
 Provider smoke tests:
 
 ```bash
-target/debug/agent-usage --help
-target/debug/agent-usage --human usage opencodego
+target/debug/agent-limits --help
+target/debug/agent-limits --human usage opencodego
 ```
 
 Claude and Codex live checks depend on local credentials and upstream usage endpoint availability.

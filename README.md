@@ -68,6 +68,18 @@ The first Rust-only release is `2026.6.0`.
 
 Release tags use the matching `vYYYY.M.PATCH` format. GitHub release binaries are produced with cargo-dist, and crates.io publishing is intended to use crates.io Trusted Publishing.
 
+`cargo binstall agent-limits` installs the cargo-dist GitHub release archives through the `[package.metadata.binstall]` mapping in `Cargo.toml`. Keep that URL pattern aligned with the archive names in `dist manifest --artifacts=all`.
+
+For crates.io Trusted Publishing, configure the `agent-limits` crate with:
+
+```text
+Publisher: GitHub Actions
+Repository owner: f4ah6o
+Repository name: agent-usage
+Workflow filename: publish.yml
+Environment name: <empty>
+```
+
 ## Development
 
 ```bash

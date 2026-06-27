@@ -1,17 +1,17 @@
-# agent-usage
+# agent-limits
 
 Rust CLI for reporting Claude Code, Codex, and OpenCode Go usage limits.
 
 ## CLI surface
 
 ```bash
-agent-usage
-agent-usage usage [claude|codex|opencodego]
-agent-usage usage --refresh
-agent-usage --human usage
-agent-usage --debug usage <provider>
-agent-usage opencodego setup
-agent-usage opencodego setup --workspace-id <id> --auth-cookie <cookie>
+agent-limits
+agent-limits usage [claude|codex|opencodego]
+agent-limits usage --refresh
+agent-limits --human usage
+agent-limits --debug usage <provider>
+agent-limits opencodego setup
+agent-limits opencodego setup --workspace-id <id> --auth-cookie <cookie>
 ```
 
 JSON is the default. `--human` switches to text rendering.
@@ -29,7 +29,7 @@ JSON is the default. `--human` switches to text rendering.
 - Claude reads the existing Claude Code credential. It does not implement login.
 - Codex reads `~/.codex/auth.json`. It does not implement login.
 - OpenCode Go reads `OPENCODE_GO_WORKSPACE_ID` and `OPENCODE_GO_AUTH_COOKIE`, or `~/Library/Application Support/opencode-bar/opencode-go.json`.
-- On macOS, `agent-usage opencodego setup` can extract the OpenCode Go workspace and auth cookie from the local Chrome profile without printing the cookie.
+- On macOS, `agent-limits opencodego setup` can extract the OpenCode Go workspace and auth cookie from the local Chrome profile without printing the cookie.
 
 ## Release
 
@@ -37,7 +37,18 @@ JSON is the default. `--human` switches to text rendering.
 - First Rust-only release: `2026.6.0`.
 - Release tags use `vYYYY.M.PATCH`.
 - cargo-dist builds GitHub release artifacts.
+- cargo-binstall uses the cargo-dist release archives through `[package.metadata.binstall]` in `Cargo.toml`.
 - crates.io publishing should use Trusted Publishing.
+
+Trusted Publishing settings for crates.io:
+
+```text
+Publisher: GitHub Actions
+Repository owner: f4ah6o
+Repository name: agent-usage
+Workflow filename: publish.yml
+Environment name: <empty>
+```
 
 ## Checks
 
