@@ -1,25 +1,9 @@
 use crate::accounts::Account;
+use crate::cred::claude::ClaudeOAuth;
 use serde_json::value::RawValue;
 
-#[derive(serde::Deserialize)]
-struct ClaudeBlob {
-    #[serde(rename = "claudeAiOauth")]
-    claude_ai_oauth: Option<OAuthFields>,
-}
-
-#[derive(serde::Deserialize)]
-struct OAuthFields {
-    #[serde(rename = "accessToken")]
-    access_token: Option<String>,
-    #[serde(rename = "refreshToken")]
-    refresh_token: Option<String>,
-    #[serde(rename = "expiresAt")]
-    expires_at: Option<i64>,
-}
-
-fn parse_raw(acct: &Account) -> Option<OAuthFields> {
-    let blob: ClaudeBlob = serde_json::from_str(acct.raw_blob.get()).ok()?;
-    blob.claude_ai_oauth
+fn parse_raw(acct: &Account) -> Option<ClaudeOAuth> {
+    crate::cred::claude::parse_claude_oauth(acct.raw_blob.get().as_bytes()).ok()
 }
 
 pub fn stored_access_token_owned(acct: &Account) -> String {
@@ -42,8 +26,14 @@ pub fn rotate_raw_blob(
     raw_blob: &RawValue,
     tok: &super::refresh::Token,
 ) -> Result<Box<RawValue>, String> {
+    let data = rotate_credential_raw(raw_blob.get().as_bytes(), tok)?;
+    let raw = String::from_utf8(data).map_err(|e| e.to_string())?;
+    RawValue::from_string(raw).map_err(|e| e.to_string())
+}
+
+pub fn rotate_credential_raw(raw: &[u8], tok: &super::refresh::Token) -> Result<Vec<u8>, String> {
     let mut m: serde_json::Map<String, serde_json::Value> =
-        serde_json::from_str(raw_blob.get()).map_err(|e| e.to_string())?;
+        serde_json::from_slice(raw).map_err(|e| e.to_string())?;
     let oauth = m
         .get_mut("claudeAiOauth")
         .and_then(|v| v.as_object_mut())
@@ -60,6 +50,5 @@ pub fn rotate_raw_blob(
         "expiresAt".into(),
         serde_json::Value::Number(tok.expires_at.into()),
     );
-    let out = serde_json::to_string(&m).map_err(|e| e.to_string())?;
-    RawValue::from_string(out).map_err(|e| e.to_string())
+    serde_json::to_vec(&m).map_err(|e| e.to_string())
 }

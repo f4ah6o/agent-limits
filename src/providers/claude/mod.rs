@@ -18,7 +18,7 @@ use crate::{
 use account::{stored_access_token_owned, stored_expires_at, stored_refresh_token};
 use chrono::Utc;
 use reconcile::{reconcile, ReconcileInput};
-use refresh::RefreshClient;
+use refresh::{RefreshClient, Token};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -27,6 +27,39 @@ const ENDPOINT: &str = "https://api.anthropic.com/api/oauth/usage";
 const BASE_TIMEOUT_SECS: u64 = 10;
 const PER_ACCOUNT_BUDGET_SECS: u64 = 15;
 const REFRESH_SKEW_MS: i64 = 30_000;
+
+fn refresh_if_needed<F>(
+    credential: Credential,
+    now_ms: i64,
+    exchange: F,
+) -> Result<Credential, ProviderError>
+where
+    F: FnOnce(String) -> Result<Token, ProviderError>,
+{
+    let oauth = cred::claude::parse_claude_oauth(&credential.raw)
+        .map_err(|e| ProviderError::Other(e.to_string()))?;
+    let expires_at_ms = oauth.expires_at.unwrap_or(0);
+    if expires_at_ms <= 0 || expires_at_ms >= now_ms + REFRESH_SKEW_MS {
+        return Ok(credential);
+    }
+
+    let refresh_token = oauth
+        .refresh_token
+        .filter(|token| !token.is_empty())
+        .ok_or_else(|| {
+            ProviderError::AuthDenied(
+                "Claude access token expired and refresh token is missing — run `claude /login` to authenticate".into(),
+            )
+        })?;
+    let token = exchange(refresh_token)?;
+    let raw = account::rotate_credential_raw(&credential.raw, &token)
+        .map_err(|e| ProviderError::Other(format!("could not refresh Claude credential: {e}")))?;
+
+    Ok(Credential {
+        access_token: token.access_token,
+        raw,
+    })
+}
 
 pub fn default_user_agent(version: &str) -> String {
     format!(
@@ -164,6 +197,24 @@ impl ClaudeClient {
             msg
         }
     }
+
+    fn map_refresh_error(e: ProviderError) -> ProviderError {
+        let msg = Self::refresh_error_message(&e);
+        match e {
+            ProviderError::AuthMissing(_) => ProviderError::AuthMissing(msg),
+            ProviderError::AuthDenied(_) => ProviderError::AuthDenied(msg),
+            ProviderError::Transient(_) => ProviderError::Transient(msg),
+            ProviderError::Other(_) => ProviderError::Other(msg),
+        }
+    }
+
+    fn refresh_live_credential(&self, credential: Credential) -> Result<Credential, ProviderError> {
+        refresh_if_needed(credential, Utc::now().timestamp_millis(), |refresh_token| {
+            self.refresh
+                .exchange(refresh_token)
+                .map_err(Self::map_refresh_error)
+        })
+    }
 }
 
 impl Provider for ClaudeClient {
@@ -172,7 +223,10 @@ impl Provider for ClaudeClient {
     }
 
     fn fetch(&self) -> Result<ProviderOutput, ProviderError> {
-        let live = self.read_live_credential()?;
+        let live = self
+            .read_live_credential()?
+            .map(|credential| self.refresh_live_credential(credential))
+            .transpose()?;
 
         let stored = self.store.list().unwrap_or_else(|e| {
             eprintln!("agent-limits: claude: could not read account store ({}); proceeding with live credential only", e);
@@ -251,13 +305,24 @@ impl Provider for ClaudeClient {
             };
 
             // Refresh if near expiry
+            let mut access_token = stored_access_token_owned(acct);
             let expires_at_ms = stored_expires_at(acct);
             if expires_at_ms > 0 {
                 let now_plus_skew = now.timestamp_millis() + REFRESH_SKEW_MS;
                 if expires_at_ms < now_plus_skew {
-                    match self.refresh.exchange(stored_refresh_token(acct)) {
+                    let refresh_token = stored_refresh_token(acct);
+                    if refresh_token.is_empty() {
+                        let e = ProviderError::AuthDenied(
+                            "Claude account is missing a refresh token — run `claude /login` to authenticate".into(),
+                        );
+                        ar.error = Some(e.to_string());
+                        account_results.push(ar);
+                        continue;
+                    }
+                    match self.refresh.exchange(refresh_token) {
                         Err(e) => {
-                            ar.error = Some(Self::refresh_error_message(&e));
+                            let e = Self::map_refresh_error(e);
+                            ar.error = Some(e.to_string());
                             if e.is_transient() {
                                 transient_count += 1;
                             }
@@ -265,6 +330,7 @@ impl Provider for ClaudeClient {
                             continue;
                         }
                         Ok(tok) => {
+                            access_token = tok.access_token.clone();
                             if let Ok(new_blob) = account::rotate_raw_blob(&acct.raw_blob, &tok) {
                                 let mut updated = acct.clone();
                                 updated.raw_blob = new_blob;
@@ -275,7 +341,6 @@ impl Provider for ClaudeClient {
                 }
             }
 
-            let access_token = stored_access_token_owned(acct);
             let limits_result = self.fetch_limits_cached(&access_token, &acct.uuid);
             let (ok, trans) = record_fetch_outcome(&mut ar, limits_result);
             if ok {
@@ -300,5 +365,68 @@ impl Provider for ClaudeClient {
             limits: None,
             accounts: account_results,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::refresh_if_needed;
+    use crate::cred::Credential;
+    use crate::providers::claude::refresh::Token;
+    use crate::providers::ProviderError;
+
+    fn credential(expires_at: i64) -> Credential {
+        Credential {
+            access_token: "old-access".into(),
+            raw: format!(
+                r#"{{"claudeAiOauth":{{"accessToken":"old-access","refreshToken":"refresh","expiresAt":{expires_at}}}}}"#
+            )
+            .into_bytes(),
+        }
+    }
+
+    #[test]
+    fn does_not_refresh_a_credential_with_enough_lifetime() {
+        let credential = credential(2_000_000);
+        let result = refresh_if_needed(credential, 1_000_000, |_| {
+            panic!("an unexpired credential must not be refreshed")
+        })
+        .expect("credential remains usable");
+
+        assert_eq!(result.access_token, "old-access");
+    }
+
+    #[test]
+    fn refreshes_expired_credential_and_rotates_in_memory_blob() {
+        let result = refresh_if_needed(credential(999_999), 1_000_000, |refresh_token| {
+            assert_eq!(refresh_token, "refresh");
+            Ok(Token {
+                access_token: "new-access".into(),
+                refresh_token: "new-refresh".into(),
+                expires_at: 2_000_000,
+            })
+        })
+        .expect("refresh succeeds");
+
+        assert_eq!(result.access_token, "new-access");
+        let oauth = crate::cred::claude::parse_claude_oauth(&result.raw).unwrap();
+        assert_eq!(oauth.access_token.as_deref(), Some("new-access"));
+        assert_eq!(oauth.refresh_token.as_deref(), Some("new-refresh"));
+        assert_eq!(oauth.expires_at, Some(2_000_000));
+    }
+
+    #[test]
+    fn expired_credential_without_refresh_token_is_auth_error() {
+        let credential = Credential {
+            access_token: "old-access".into(),
+            raw: br#"{"claudeAiOauth":{"accessToken":"old-access","expiresAt":999999}}"#.to_vec(),
+        };
+        let error = refresh_if_needed(credential, 1_000_000, |_| {
+            Err(ProviderError::Other("must not be called".into()))
+        })
+        .expect_err("missing refresh token must fail");
+
+        assert!(matches!(error, ProviderError::AuthDenied(_)));
+        assert!(!error.to_string().contains("old-access"));
     }
 }
