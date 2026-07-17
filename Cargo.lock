@@ -21,7 +21,7 @@ dependencies = [
 
 [[package]]
 name = "agent-limits"
-version = "2026.7.0"
+version = "2026.7.2"
 dependencies = [
  "aes",
  "base64",
