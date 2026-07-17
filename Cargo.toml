@@ -42,7 +42,7 @@ hmac = "0.12"
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.tar.xz"
-bin-dir = "{ bin }"
+bin-dir = "{ name }-{ target }/{ bin }{ binary-ext }"
 pkg-fmt = "txz"
 
 # Config for 'dist'
