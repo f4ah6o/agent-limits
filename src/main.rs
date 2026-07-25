@@ -1,5 +1,6 @@
 mod accounts;
 mod cli;
+mod config;
 mod cred;
 mod httpx;
 mod orchestrate;
@@ -7,6 +8,7 @@ mod providers;
 mod render;
 
 use clap::{Parser, Subcommand};
+use cli::config::{run_config, ConfigAction};
 use cli::opencode_setup::{run_setup, SetupArgs};
 use cli::usage::{run_usage, UsageArgs};
 
@@ -31,7 +33,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Report usage for all providers (default), or one: claude, codex, opencodego
+    /// Report usage for all enabled providers (default), or one provider explicitly
     Usage {
         /// Provider to query: claude, codex, opencodego
         provider: Option<String>,
@@ -39,6 +41,12 @@ enum Commands {
         /// Bypass the usage cache and force a fresh read
         #[arg(long = "refresh")]
         refresh: bool,
+    },
+
+    /// Enable, disable, or list providers used by default usage reports
+    Config {
+        #[command(subcommand)]
+        action: ConfigCommand,
     },
 
     /// Configure OpenCode Go credentials
@@ -50,15 +58,18 @@ enum Commands {
 }
 
 #[derive(Subcommand)]
+enum ConfigCommand {
+    /// Enable a provider in default usage reports
+    Enable { provider: String },
+    /// Disable a provider in default usage reports
+    Disable { provider: String },
+    /// List provider states and the config file path
+    List,
+}
+
+#[derive(Subcommand)]
 enum OpenCodeGoAction {
     /// Save workspace ID and auth cookie to ~/.config/opencode-bar/opencode-go.json
-    ///
-    /// How to find your values:
-    ///   Workspace ID : open https://opencode.ai in a browser and navigate to your
-    ///                  Go dashboard — the ID appears in the URL as
-    ///                  opencode.ai/workspace/<WORKSPACE_ID>/go
-    ///   Auth cookie  : open DevTools (F12) → Application → Cookies →
-    ///                  https://opencode.ai → copy the value of the "auth" cookie
     Setup {
         /// Workspace ID (from the dashboard URL). If omitted, setup tries Chrome.
         #[arg(long)]
@@ -80,6 +91,11 @@ fn main() {
             refresh,
             human,
             debug: cli.debug,
+        }),
+        Some(Commands::Config { action }) => run_config(match action {
+            ConfigCommand::Enable { provider } => ConfigAction::Enable { provider },
+            ConfigCommand::Disable { provider } => ConfigAction::Disable { provider },
+            ConfigCommand::List => ConfigAction::List,
         }),
         Some(Commands::OpenCodeGo {
             action:

@@ -1,3 +1,4 @@
+use crate::config::Config;
 use crate::orchestrate::{run, ExitStatus, RunOptions};
 use crate::providers::KNOWN_PROVIDER_IDS;
 use crate::render::{json::render_json, text::render_text};
@@ -22,9 +23,17 @@ pub fn run_usage(args: UsageArgs) -> i32 {
         }
     }
 
+    let config = match Config::load() {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("usage: {error}");
+            return ExitStatus::UsageError as i32;
+        }
+    };
+
     let requested: Vec<&str> = match &args.provider {
         Some(p) => vec![p.as_str()],
-        None => KNOWN_PROVIDER_IDS.to_vec(),
+        None => config.enabled_provider_ids(),
     };
 
     let providers = crate::cli::registry::real_providers(args.refresh, args.debug);
