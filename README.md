@@ -22,14 +22,24 @@ cargo binstall agent-limits
 
 ```bash
 agent-limits                         # same as `agent-limits usage`
-agent-limits usage                   # report all configured providers
+agent-limits usage                   # report all enabled providers
 agent-limits usage claude            # report Claude only
 agent-limits usage codex             # report Codex only
-agent-limits usage opencodego        # report OpenCode Go only
+agent-limits usage opencodego        # report OpenCode Go only, even when disabled by config
 agent-limits usage --refresh         # bypass the 90 s usage cache
 agent-limits --human usage           # human-readable output
 agent-limits --debug usage codex     # request/debug lines on stderr
 ```
+
+Disable a provider from the default report through the CLI:
+
+```bash
+agent-limits config disable opencodego
+agent-limits config list
+agent-limits config enable opencodego
+```
+
+Provider state is stored in the platform config directory under `agent-limits/config.json`. A disabled provider is skipped only by `agent-limits` and `agent-limits usage`; explicitly naming the provider still queries it.
 
 Example:
 
