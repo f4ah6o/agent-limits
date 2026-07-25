@@ -37,7 +37,10 @@ fn set_provider(provider: String, enabled: bool) -> i32 {
         return 1;
     }
 
-    println!("{provider}: {}", if enabled { "enabled" } else { "disabled" });
+    println!(
+        "{provider}: {}",
+        if enabled { "enabled" } else { "disabled" }
+    );
     0
 }
 
