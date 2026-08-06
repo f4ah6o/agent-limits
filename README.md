@@ -2,7 +2,7 @@
 
 `agent-limits` reports Claude Code, Codex, and OpenCode Go usage limits from the terminal.
 
-JSON is the default output. Pass `--human` for a compact text view.
+JSON is the default output. Pass `--human` for a compact text view or `--bar` for a visual bar graph.
 
 ## Install
 
@@ -29,6 +29,7 @@ agent-limits usage opencodego        # report OpenCode Go only, even when disabl
 agent-limits usage --refresh         # bypass the 90 s usage cache
 agent-limits --human usage           # human-readable output
 agent-limits --debug usage codex     # request/debug lines on stderr
+agent-limits usage opencodego --bar  # visual bar graph
 ```
 
 Manage which providers are included in the default report:
@@ -49,6 +50,19 @@ Opencodego usage
 - 7-day: 53.0% (resets in 1d 21h)
 - Monthly: 100.0% (resets in 6d 4h)
 ```
+
+### Bar graph (`--bar`)
+
+Use `--bar` for a visual bar graph of usage per window:
+
+```text
+Opencodego usage
+  5-hour   ██████████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░  0.0%  5h 0m
+  7-day    ████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  42.0%  1d 21h
+  Monthly  ████████████████████████████████████████░░░░░░░░░░░░░░  78.0%  6d 4h
+```
+
+Bars are colour-coded: green (<30%), yellow (30–70%), red (>70%). Set `NO_COLOR=1` to disable colour.
 
 ## Authentication
 

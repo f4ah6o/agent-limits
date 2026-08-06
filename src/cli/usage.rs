@@ -1,12 +1,13 @@
 use crate::config::Config;
 use crate::orchestrate::{run, ExitStatus, RunOptions};
 use crate::providers::KNOWN_PROVIDER_IDS;
-use crate::render::{json::render_json, text::render_text};
+use crate::render::{bar::render_bar, json::render_json, text::render_text};
 use std::io::{self};
 
 pub struct UsageArgs {
     pub provider: Option<String>,
     pub refresh: bool,
+    pub bar: bool,
     pub human: bool,
     pub debug: bool,
 }
@@ -49,7 +50,9 @@ pub fn run_usage(args: UsageArgs) -> i32 {
     let stdout = io::stdout();
     let mut out = stdout.lock();
 
-    let render_err = if args.human {
+    let render_err = if args.bar {
+        render_bar(&mut out, &report, &requested)
+    } else if args.human {
         render_text(&mut out, &report, &requested)
     } else {
         render_json(&mut out, &report)

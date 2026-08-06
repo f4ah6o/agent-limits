@@ -2,12 +2,12 @@ use crate::providers::{provider_title, AccountResult, Limit, Report};
 use std::collections::BTreeMap;
 use std::io::Write;
 
-struct LabelEntry {
-    key: &'static str,
-    label: &'static str,
+pub struct LabelEntry {
+    pub key: &'static str,
+    pub label: &'static str,
 }
 
-fn text_labels(provider_id: &str) -> &'static [LabelEntry] {
+pub fn text_labels(provider_id: &str) -> &'static [LabelEntry] {
     match provider_id {
         "claude" => &[
             LabelEntry {
@@ -55,7 +55,7 @@ fn text_labels(provider_id: &str) -> &'static [LabelEntry] {
     }
 }
 
-fn rate_limit_tier_label(tier: &str) -> &str {
+pub fn rate_limit_tier_label(tier: &str) -> &str {
     match tier {
         "default_claude_max_5x" => "Max 5x",
         "default_claude_max_20x" => "Max 20x",
@@ -65,7 +65,7 @@ fn rate_limit_tier_label(tier: &str) -> &str {
     }
 }
 
-fn format_reset_duration(seconds: i64) -> String {
+pub fn format_reset_duration(seconds: i64) -> String {
     if seconds <= 0 {
         return "0m".into();
     }
@@ -81,7 +81,7 @@ fn format_reset_duration(seconds: i64) -> String {
     }
 }
 
-fn format_limit_line(label: &str, l: &Limit) -> String {
+pub fn format_limit_line(label: &str, l: &Limit) -> String {
     format!(
         "- {}: {:.1}% (resets in {})",
         label,
