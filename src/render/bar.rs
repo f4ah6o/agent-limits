@@ -13,7 +13,7 @@ const GRAY: &str = "\x1b[90m";
 fn color_for_pct(pct: f64) -> &'static str {
     if pct < 30.0 {
         GREEN
-    } else if pct < 70.0 {
+    } else if pct <= 70.0 {
         YELLOW
     } else {
         RED
@@ -123,6 +123,12 @@ fn render_accounts_bar(
         let plan_label = rate_limit_tier_label(&ar.plan);
         if !plan_label.is_empty() {
             header.push_str(&format!(" [{}]", plan_label));
+        }
+        if let Some(ref err) = ar.error {
+            if !err.is_empty() {
+                lines.push(format!("{}: {}", header, err));
+                continue;
+            }
         }
         lines.push(header);
         if let Some(ref lims) = ar.limits {
@@ -378,6 +384,24 @@ mod tests {
     }
 
     #[test]
+    fn color_boundary_70_percent_is_yellow() {
+        let limit = make_limit(70.0, 30.0, 3600);
+        let line = format_bar_line("5-hour", 12, &limit, true);
+
+        assert!(line.contains("\x1b[33m")); // yellow (not red)
+        assert!(!line.contains("\x1b[31m"));
+    }
+
+    #[test]
+    fn color_boundary_30_percent_is_yellow() {
+        let limit = make_limit(30.0, 70.0, 3600);
+        let line = format_bar_line("5-hour", 12, &limit, true);
+
+        assert!(line.contains("\x1b[33m")); // yellow
+        assert!(!line.contains("\x1b[32m"));
+    }
+
+    #[test]
     fn multiple_providers_rendered() {
         let mut limits1 = BTreeMap::new();
         limits1.insert("five_hour".to_string(), make_limit(80.0, 20.0, 7200));
@@ -448,5 +472,36 @@ mod tests {
         assert!(output.contains("(active)"));
         assert!(output.contains("[pro]"));
         assert!(output.contains("60.0%"));
+    }
+
+    #[test]
+    fn accounts_with_error_rendered() {
+        let mut providers = BTreeMap::new();
+        providers.insert(
+            "opencodego".to_string(),
+            ProviderResult {
+                limits: None,
+                accounts: vec![AccountResult {
+                    email: "broken@example.com".to_string(),
+                    plan: "".to_string(),
+                    active: false,
+                    limits: None,
+                    error: Some("token expired".to_string()),
+                }],
+                error: None,
+            },
+        );
+
+        let report = Report {
+            checked_at: Utc::now(),
+            providers,
+        };
+
+        let mut buf = vec![];
+        render_bar(&mut buf, &report, &["opencodego"]).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+
+        assert!(output.contains("broken@example.com"));
+        assert!(output.contains("token expired"));
     }
 }
