@@ -24,9 +24,8 @@ pub fn render_bar<W: Write>(
     w: &mut W,
     report: &Report,
     requested: &[&str],
+    use_color: bool,
 ) -> std::io::Result<()> {
-    let use_color = std::env::var("NO_COLOR").is_err()
-        && std::env::var("CLICOLOR").map(|v| v != "0").unwrap_or(true);
 
     let mut sections: Vec<String> = vec![];
     for &id in requested {
@@ -226,7 +225,7 @@ mod tests {
 
         let report = make_report(limits);
         let mut buf = vec![];
-        render_bar(&mut buf, &report, &["opencodego"]).unwrap();
+        render_bar(&mut buf, &report, &["opencodego"], false).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         assert!(output.contains("Opencodego usage"));
@@ -247,7 +246,7 @@ mod tests {
 
         let report = make_report(limits);
         let mut buf = vec![];
-        render_bar(&mut buf, &report, &["opencodego"]).unwrap();
+        render_bar(&mut buf, &report, &["opencodego"], false).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         let line = output
@@ -275,7 +274,7 @@ mod tests {
             providers,
         };
         let mut buf = vec![];
-        render_bar(&mut buf, &report, &["opencodego"]).unwrap();
+        render_bar(&mut buf, &report, &["opencodego"], false).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         assert!(output.contains("Opencodego usage"));
@@ -289,7 +288,7 @@ mod tests {
             providers: BTreeMap::new(),
         };
         let mut buf = vec![];
-        render_bar(&mut buf, &report, &["opencodego"]).unwrap();
+        render_bar(&mut buf, &report, &["opencodego"], false).unwrap();
         assert!(buf.is_empty());
     }
 
@@ -300,7 +299,7 @@ mod tests {
 
         let report = make_report(limits);
         let mut buf = vec![];
-        render_bar(&mut buf, &report, &["opencodego"]).unwrap();
+        render_bar(&mut buf, &report, &["opencodego"], false).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         let line = output
@@ -319,7 +318,7 @@ mod tests {
 
         let report = make_report(limits);
         let mut buf = vec![];
-        render_bar(&mut buf, &report, &["opencodego"]).unwrap();
+        render_bar(&mut buf, &report, &["opencodego"], false).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         let line = output
@@ -338,7 +337,7 @@ mod tests {
 
         let report = make_report(limits);
         let mut buf = vec![];
-        render_bar(&mut buf, &report, &["opencodego"]).unwrap();
+        render_bar(&mut buf, &report, &["opencodego"], false).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         let line = output
@@ -357,7 +356,7 @@ mod tests {
 
         let report = make_report(limits);
         let mut buf = vec![];
-        render_bar(&mut buf, &report, &["opencodego"]).unwrap();
+        render_bar(&mut buf, &report, &["opencodego"], false).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         assert!(output.contains("5-hour"));
@@ -432,7 +431,7 @@ mod tests {
         };
 
         let mut buf = vec![];
-        render_bar(&mut buf, &report, &["opencodego", "claude"]).unwrap();
+        render_bar(&mut buf, &report, &["opencodego", "claude"], false).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         assert!(output.contains("Opencodego usage"));
@@ -465,7 +464,7 @@ mod tests {
         };
 
         let mut buf = vec![];
-        render_bar(&mut buf, &report, &["opencodego"]).unwrap();
+        render_bar(&mut buf, &report, &["opencodego"], false).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         assert!(output.contains("test@example.com"));
@@ -498,7 +497,7 @@ mod tests {
         };
 
         let mut buf = vec![];
-        render_bar(&mut buf, &report, &["opencodego"]).unwrap();
+        render_bar(&mut buf, &report, &["opencodego"], false).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         assert!(output.contains("broken@example.com"));
