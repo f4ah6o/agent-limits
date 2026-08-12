@@ -30,7 +30,6 @@ dependencies = [
  "clap",
  "dirs",
  "fs2",
- "hmac",
  "pbkdf2",
  "regex",
  "rusqlite",
