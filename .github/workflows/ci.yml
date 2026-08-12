@@ -77,7 +77,9 @@ jobs:
             label=$1
             dir=$2
             packages=$(cd "$dir" && cargo tree --target "$host" --edges normal --prefix none --format '{p}' | sort -u | wc -l | tr -d ' ')
-            duplicates=$(cd "$dir" && cargo tree --target "$host" --edges normal -d --prefix none --format '{p}' | sort -u | wc -l | tr -d ' ')
+            # `cargo tree -d` implies an inverted tree. Depth 0 keeps only the
+            # duplicated package roots instead of counting their reverse dependents.
+            duplicates=$(cd "$dir" && cargo tree --target "$host" --edges normal -d --depth 0 --prefix none --format '{p}' | sed '/^[[:space:]]*$/d' | sort -u | wc -l | tr -d ' ')
             (cd "$dir" && cargo tree --target "$host" --edges features >/dev/null)
             cargo build --release --manifest-path "$dir/Cargo.toml"
             bytes=$(wc -c < "$dir/target/release/agent-limits" | tr -d ' ')
