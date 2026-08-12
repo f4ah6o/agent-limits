@@ -54,6 +54,9 @@ jobs:
           set -euo pipefail
           host=$(rustc -vV | sed -n 's/^host: //p')
           baseline="$RUNNER_TEMP/agent-limits-baseline"
+          # main currently contains a malformed symlink; materialize symlinks as files
+          # so macOS can still check out the baseline revision for comparison.
+          git config core.symlinks false
           git worktree add --detach "$baseline" origin/main
 
           measure() {
