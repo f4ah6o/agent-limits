@@ -3,23 +3,34 @@ name: Publish crate
 on:
   push:
     tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+*'
+      - latest
+
+permissions:
+  contents: write
+  id-token: write
+  actions: write
 
 jobs:
   publish:
+    permissions:
+      contents: write
+      id-token: write
+    uses: f4ah6o/calver-action/.github/workflows/rust-crate.yaml@ed77f35391c8a334e420974bb7983b0a13fc5deb
+    with:
+      format: YYYY.MM.PATCH
+      timezone: Asia/Tokyo
+      tag_prefix: v
+      source_branch: main
+
+  dist-release:
+    needs: publish
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: read
-      id-token: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Authenticate with crates.io
-        id: auth
-        uses: rust-lang/crates-io-auth-action@v1
-      - name: Publish to crates.io
-        run: cargo publish --locked
+      - name: Dispatch cargo-dist release
         env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.publish.outputs.tag }}
+        run: gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG" -f tag="$TAG"
