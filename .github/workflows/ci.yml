@@ -34,6 +34,49 @@ jobs:
       - name: Publish dry run
         run: cargo publish --dry-run
 
+  dependency-metrics:
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Compare dependency graph and release size
+        shell: bash
+        run: |
+          set -euo pipefail
+          host=$(rustc -vV | sed -n 's/^host: //p')
+          baseline="$RUNNER_TEMP/agent-limits-baseline"
+          git worktree add --detach "$baseline" origin/main
+
+          measure() {
+            label=$1
+            dir=$2
+            packages=$(cd "$dir" && cargo tree --target "$host" --edges normal --prefix none --format '{p}' | sort -u | wc -l | tr -d ' ')
+            duplicates=$(cd "$dir" && cargo tree --target "$host" --edges normal -d --prefix none --format '{p}' | sort -u | wc -l | tr -d ' ')
+            cargo build --release --manifest-path "$dir/Cargo.toml"
+            bytes=$(wc -c < "$dir/target/release/agent-limits" | tr -d ' ')
+            echo "$label packages=$packages duplicate_packages=$duplicates release_bytes=$bytes"
+            printf '| %s | %s | %s | %s |\n' "$label" "$packages" "$duplicates" "$bytes" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          {
+            echo "## Dependency metrics ($host)"
+            echo
+            echo '| revision | packages | duplicate packages | release bytes |'
+            echo '| --- | ---: | ---: | ---: |'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          measure baseline "$baseline"
+          measure proposed "$GITHUB_WORKSPACE"
+
   dist-check:
     runs-on: ubuntu-latest
     steps:
