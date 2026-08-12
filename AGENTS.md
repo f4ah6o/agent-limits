@@ -54,9 +54,10 @@ Provider state is stored as JSON below the platform configuration directory in `
 - Versioning is CalVer: `YYYY.M.PATCH`.
 - First Rust-only release: `2026.6.0`.
 - Release tags use `vYYYY.M.PATCH`.
-- cargo-dist builds GitHub release artifacts.
+- Move the mutable `latest` tag to a commit in `main` history to start a release.
+- `publish.yml` calls `f4ah6o/calver-action` to allocate the CalVer, update Cargo metadata in a release-only commit, publish through crates.io Trusted Publishing, and create the immutable version tag.
+- The caller then dispatches cargo-dist for that immutable tag so GitHub release artifacts are built from the same release-only commit.
 - cargo-binstall uses the cargo-dist release archives through `[package.metadata.binstall]` in `Cargo.toml`.
-- crates.io publishing should use Trusted Publishing.
 
 Trusted Publishing settings for crates.io:
 
