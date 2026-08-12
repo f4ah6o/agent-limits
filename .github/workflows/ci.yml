@@ -25,6 +25,20 @@ jobs:
       - name: Check
         run: cargo check --all-targets
 
+      - name: Check Linux excludes macOS-only dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          host=$(rustc -vV | sed -n 's/^host: //p')
+          tree=$(cargo tree --target "$host" --edges normal --prefix none --format '{p}')
+          for crate in aes cbc hmac pbkdf2 rusqlite sha1; do
+            if grep -Eq "^${crate} v" <<< "$tree"; then
+              echo "macOS-only dependency leaked into Linux graph: $crate" >&2
+              exit 1
+            fi
+          done
+
       - name: Test
         run: cargo test
 
@@ -64,6 +78,7 @@ jobs:
             dir=$2
             packages=$(cd "$dir" && cargo tree --target "$host" --edges normal --prefix none --format '{p}' | sort -u | wc -l | tr -d ' ')
             duplicates=$(cd "$dir" && cargo tree --target "$host" --edges normal -d --prefix none --format '{p}' | sort -u | wc -l | tr -d ' ')
+            (cd "$dir" && cargo tree --target "$host" --edges features >/dev/null)
             cargo build --release --manifest-path "$dir/Cargo.toml"
             bytes=$(wc -c < "$dir/target/release/agent-limits" | tr -d ' ')
             echo "$label packages=$packages duplicate_packages=$duplicates release_bytes=$bytes"
