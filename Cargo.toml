@@ -26,7 +26,7 @@ path = "src/main.rs"
 [dependencies]
 ureq = { version = "3", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["raw_value"] }
+serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 base64 = "0.22"
 thiserror = "2"
@@ -34,12 +34,13 @@ clap = { version = "4", features = ["derive"] }
 dirs = "6"
 fs2 = "0.4"
 regex = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
 rusqlite = "0.31"
 aes = "0.8"
 cbc = { version = "0.1", features = ["std"] }
 pbkdf2 = "0.12"
 sha1 = "0.10"
-hmac = "0.12"
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.tar.xz"
@@ -57,6 +58,8 @@ installers = ["shell"]
 targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
 cargo-dist-version = "0.32.0"
+# Allow the CalVer publish workflow to dispatch cargo-dist for the immutable release tag.
+dispatch-releases = true
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"
 # Whether to install an updater program
