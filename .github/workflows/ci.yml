@@ -13,6 +13,11 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
+      # AGENTS.md is a malformed symlink whose target exceeds macOS's path
+      # limit; materialize symlinks as files so checkout succeeds everywhere.
+      - name: Materialize symlinks as files
+        run: git config --global core.symlinks false
+
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
