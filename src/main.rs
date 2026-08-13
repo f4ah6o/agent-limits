@@ -90,7 +90,11 @@ fn main() {
     let human = cli.human;
 
     let code = match cli.command {
-        Some(Commands::Usage { provider, refresh, bar }) => run_usage(UsageArgs {
+        Some(Commands::Usage {
+            provider,
+            refresh,
+            bar,
+        }) => run_usage(UsageArgs {
             provider,
             refresh,
             bar,

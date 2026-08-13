@@ -26,7 +26,6 @@ pub fn render_bar<W: Write>(
     requested: &[&str],
     use_color: bool,
 ) -> std::io::Result<()> {
-
     let mut sections: Vec<String> = vec![];
     for &id in requested {
         let result = match report.providers.get(id) {
@@ -96,12 +95,7 @@ fn render_limits_bar(
         items.push((k.clone(), &limits[k]));
     }
 
-    let label_width = items
-        .iter()
-        .map(|(l, _)| l.len())
-        .max()
-        .unwrap_or(6)
-        .max(6);
+    let label_width = items.iter().map(|(l, _)| l.len()).max().unwrap_or(6).max(6);
 
     for (label, limit) in &items {
         lines.push(format_bar_line(label, label_width, limit, use_color));
@@ -162,8 +156,11 @@ fn format_bar_line(label: &str, label_width: usize, l: &Limit, use_color: bool) 
         format!(
             "  {:<width$}  {}{}  {}{}{}  {}",
             label,
-            bar, RESET,
-            pct_color, pct_str, RESET,
+            bar,
+            RESET,
+            pct_color,
+            pct_str,
+            RESET,
             reset_str,
             width = label_width,
         )
@@ -446,17 +443,20 @@ mod tests {
         limits.insert("five_hour".to_string(), make_limit(60.0, 40.0, 3600));
 
         let mut providers = BTreeMap::new();
-        providers.insert("opencodego".to_string(), ProviderResult {
-            limits: None,
-            accounts: vec![AccountResult {
-                email: "test@example.com".to_string(),
-                plan: "pro".to_string(),
-                active: true,
-                limits: Some(limits),
+        providers.insert(
+            "opencodego".to_string(),
+            ProviderResult {
+                limits: None,
+                accounts: vec![AccountResult {
+                    email: "test@example.com".to_string(),
+                    plan: "pro".to_string(),
+                    active: true,
+                    limits: Some(limits),
+                    error: None,
+                }],
                 error: None,
-            }],
-            error: None,
-        });
+            },
+        );
 
         let report = Report {
             checked_at: Utc::now(),
