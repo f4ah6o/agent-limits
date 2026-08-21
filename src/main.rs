@@ -41,6 +41,10 @@ enum Commands {
         /// Bypass the usage cache and force a fresh read
         #[arg(long = "refresh")]
         refresh: bool,
+
+        /// Render usage as a bar graph
+        #[arg(long = "bar")]
+        bar: bool,
     },
 
     /// Enable, disable, or list providers used by default usage reports
@@ -86,9 +90,14 @@ fn main() {
     let human = cli.human;
 
     let code = match cli.command {
-        Some(Commands::Usage { provider, refresh }) => run_usage(UsageArgs {
+        Some(Commands::Usage {
             provider,
             refresh,
+            bar,
+        }) => run_usage(UsageArgs {
+            provider,
+            refresh,
+            bar,
             human,
             debug: cli.debug,
         }),
@@ -110,6 +119,7 @@ fn main() {
         None => run_usage(UsageArgs {
             provider: None,
             refresh: false,
+            bar: false,
             human,
             debug: cli.debug,
         }),
