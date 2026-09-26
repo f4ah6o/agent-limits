@@ -73,8 +73,7 @@ impl DevinClient {
                 self.log(&format!("HTTP {}", code));
                 return match code {
                     401 | 403 => Err(ProviderError::AuthDenied(
-                        "Devin local API key is no longer accepted — run `devin auth login`"
-                            .into(),
+                        "Devin local API key is no longer accepted — run `devin auth login`".into(),
                     )),
                     429 | 500..=599 => Err(ProviderError::Transient(format!(
                         "Devin user-status API returned HTTP {}",
@@ -251,9 +250,15 @@ fn devin_version() -> String {
         .unwrap_or_else(|| "unknown".into())
 }
 
-fn parse_usage(payload: &str, now: DateTime<Utc>) -> Result<BTreeMap<String, Limit>, ProviderError> {
+fn parse_usage(
+    payload: &str,
+    now: DateTime<Utc>,
+) -> Result<BTreeMap<String, Limit>, ProviderError> {
     let payload: Value = serde_json::from_str(payload).map_err(|error| {
-        ProviderError::Other(format!("Devin user-status API returned invalid JSON: {}", error))
+        ProviderError::Other(format!(
+            "Devin user-status API returned invalid JSON: {}",
+            error
+        ))
     })?;
 
     let plan_status = payload
