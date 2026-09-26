@@ -37,6 +37,16 @@ pub fn text_labels(provider_id: &str) -> &'static [LabelEntry] {
                 label: "Code review 7-day",
             },
         ],
+        "devin" => &[
+            LabelEntry {
+                key: "daily",
+                label: "Daily",
+            },
+            LabelEntry {
+                key: "weekly",
+                label: "Weekly",
+            },
+        ],
         "opencodego" => &[
             LabelEntry {
                 key: "five_hour",

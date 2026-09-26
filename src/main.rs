@@ -15,7 +15,7 @@ use cli::usage::{run_usage, UsageArgs};
 #[derive(Parser)]
 #[command(
     name = "agent-limits",
-    about = "agent-limits — read Claude / Codex / OpenCode Go usage limits",
+    about = "agent-limits — read Claude / Codex / Devin / OpenCode Go usage limits",
     version = env!("CARGO_PKG_VERSION"),
 )]
 struct Cli {
@@ -35,7 +35,7 @@ struct Cli {
 enum Commands {
     /// Report usage for all enabled providers (default), or one provider explicitly
     Usage {
-        /// Provider to query: claude, codex, opencodego
+        /// Provider to query: claude, codex, devin, opencodego
         provider: Option<String>,
 
         /// Bypass the usage cache and force a fresh read

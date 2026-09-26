@@ -1,6 +1,7 @@
 use crate::httpx::DebugFn;
 use crate::providers::claude::ClaudeClient;
 use crate::providers::codex::CodexClient;
+use crate::providers::devin::DevinClient;
 use crate::providers::opencode_go::OpenCodeGoClient;
 use crate::providers::{Provider, ProviderError, ProviderOutput};
 
@@ -31,6 +32,10 @@ pub fn real_providers(cache_bypass: bool, debug: bool) -> Vec<Box<dyn Provider>>
             None,
             cache_bypass,
         )))),
+        Box::new(DevinClient::new(
+            crate::providers::devin::default_user_agent(v),
+            make_debug(""),
+        )),
         Box::new(OpenCodeGoClient::new(
             crate::providers::opencode_go::default_user_agent(v),
             make_debug(""),
