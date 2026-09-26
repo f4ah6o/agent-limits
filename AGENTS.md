@@ -1,6 +1,6 @@
 # agent-limits
 
-Rust CLI for reporting Claude Code, Codex, and OpenCode Go usage limits.
+Rust CLI for reporting Claude Code, Codex, Devin CLI, and OpenCode Go usage limits.
 
 README.md is for users. Keep implementation details, release procedures, repository structure, and maintainer-only notes in AGENTS.md or `docs/`.
 
@@ -8,7 +8,7 @@ README.md is for users. Keep implementation details, release procedures, reposit
 
 ```bash
 agent-limits
-agent-limits usage [claude|codex|opencodego]
+agent-limits usage [claude|codex|devin|opencodego]
 agent-limits usage --refresh
 agent-limits --human usage
 agent-limits --debug usage <provider>
@@ -46,6 +46,7 @@ Provider state is stored as JSON below the platform configuration directory in `
 
 - Claude reads the existing Claude Code credential. It does not implement login.
 - Codex reads `~/.codex/auth.json`. It does not implement login.
+- Devin reads the Devin CLI `credentials.toml` (`windsurf_api_key` plus optional `api_server_url`) and calls the read-only `GetUserStatus` service for daily/weekly quota. It does not implement login and must never log the API key.
 - OpenCode Go reads `OPENCODE_GO_WORKSPACE_ID` and `OPENCODE_GO_AUTH_COOKIE`, or the OpenCode Bar configuration file.
 - On macOS, `agent-limits opencodego setup` can extract the OpenCode Go workspace and auth cookie from the local Chrome profile without printing the cookie.
 
