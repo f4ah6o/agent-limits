@@ -82,6 +82,7 @@ mod tests {
         let config = Config::load_from(&path).unwrap();
         assert!(config.is_enabled("claude"));
         assert!(config.is_enabled("codex"));
+        assert!(config.is_enabled("devin"));
         assert!(config.is_enabled("opencodego"));
     }
 
