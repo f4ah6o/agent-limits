@@ -1,6 +1,7 @@
 pub mod classify;
 pub mod claude;
 pub mod codex;
+pub mod devin;
 pub mod multiaccount;
 pub mod opencode_go;
 pub mod usagecache;
@@ -12,7 +13,7 @@ use thiserror::Error;
 
 pub const ISO8601_FMT: &str = "%Y-%m-%dT%H:%M:%S%:z";
 
-pub const KNOWN_PROVIDER_IDS: &[&str] = &["claude", "codex", "opencodego"];
+pub const KNOWN_PROVIDER_IDS: &[&str] = &["claude", "codex", "devin", "opencodego"];
 
 pub const ISSUE_TRACKER_URL: &str = "https://github.com/f4ah6o/agent-usage/issues";
 
