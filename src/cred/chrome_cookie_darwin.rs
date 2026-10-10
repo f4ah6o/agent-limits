@@ -6,7 +6,7 @@
 ///   iv   = b' ' * 16
 ///   data = AES-128-CBC-decrypt(cookie_encrypted_value[3:], key, iv)
 ///          (strip 3-byte "v10" prefix before decrypting)
-use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
+use aes::cipher::{block_padding::Pkcs7, BlockModeDecrypt, KeyIvInit};
 use pbkdf2::pbkdf2_hmac;
 use sha1::Sha1;
 use std::path::Path;
@@ -131,7 +131,7 @@ fn decrypt_cookie(encrypted: &[u8], key: &[u8; 16]) -> Option<String> {
 
     let mut buf = ciphertext.to_vec();
     let pt = Aes128CbcDec::new(key.into(), &iv.into())
-        .decrypt_padded_mut::<Pkcs7>(&mut buf)
+        .decrypt_padded::<Pkcs7>(&mut buf)
         .ok()?;
     // Chromium cookie DB schema version 24 prefixes decrypted values with a
     // SHA-256 digest of the host key.
