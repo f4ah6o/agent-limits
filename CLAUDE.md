@@ -46,7 +46,7 @@ Trusted Publishing settings for crates.io:
 Publisher: GitHub Actions
 Repository owner: f4ah6o
 Repository name: agent-limits
-Workflow filename: publish.yml
+Workflow filename: release.yaml
 Environment name: <empty>
 ```
 

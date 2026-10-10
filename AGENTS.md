@@ -56,8 +56,8 @@ Provider state is stored as JSON below the platform configuration directory in `
 - First Rust-only release: `2026.6.0`.
 - Release tags use `vYYYY.M.PATCH`.
 - Move the mutable `latest` tag to a commit in `main` history to start a release.
-- `publish.yml` calls `f4ah6o/calver-action` to allocate the CalVer, update Cargo metadata in a release-only commit, publish through crates.io Trusted Publishing, and create the immutable version tag.
-- The caller then dispatches cargo-dist for that immutable tag so GitHub release artifacts are built from the same release-only commit.
+- `release.yaml` calls `f4ah6o/calver-action` (`rust-dist.yaml`) to allocate the CalVer, update Cargo metadata in a release-only commit, publish through crates.io Trusted Publishing, and create the immutable version tag.
+- The reusable workflow then dispatches cargo-dist for that immutable tag so GitHub release artifacts are built from the same release-only commit, and runs the `cargo binstall` acceptance check.
 - cargo-binstall uses the cargo-dist release archives through `[package.metadata.binstall]` in `Cargo.toml`.
 
 Trusted Publishing settings for crates.io:
@@ -66,7 +66,7 @@ Trusted Publishing settings for crates.io:
 Publisher: GitHub Actions
 Repository owner: f4ah6o
 Repository name: agent-limits
-Workflow filename: publish.yml
+Workflow filename: release.yaml
 Environment name: <empty>
 ```
 
