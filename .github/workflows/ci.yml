@@ -106,7 +106,7 @@ jobs:
       - name: Install cargo-binstall
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-binstall
+          tool: cargo-binstall@1.25.2  # install-action resolves latest tag to stale 0.23.1
       - name: Install cargo-dist
         run: cargo binstall -y --locked cargo-dist@0.32.0
       - name: Check generated cargo-dist workflow
