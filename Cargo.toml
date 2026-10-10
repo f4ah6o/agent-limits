@@ -2,7 +2,7 @@
 name = "agent-limits"
 version = "2026.7.2"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.99"
 description = "Monitor Claude, Codex, Devin, and OpenCode Go usage limits from the terminal"
 license = "MIT"
 repository = "https://github.com/f4ah6o/agent-limits"
@@ -28,19 +28,19 @@ ureq = { version = "3", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 chrono = { version = "0.4", features = ["serde"] }
-base64 = "0.22"
+base64 = "0.23"
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
-dirs = "6"
+dirs = "7"
 fs2 = "0.4"
 regex = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-rusqlite = "0.31"
-aes = "0.8"
-cbc = { version = "0.1", features = ["std"] }
-pbkdf2 = "0.12"
-sha1 = "0.10"
+rusqlite = "0.40"
+aes = "0.9"
+cbc = "0.2"
+pbkdf2 = "0.13"
+sha1 = "0.11"
 
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.tar.xz"
